@@ -86,6 +86,10 @@ describe('normalizeBoard', () => {
         notesPrivate: true,
         settings: {
           fontScale: 99,
+          boardName: '   Studio   ',
+          clockFormat: 'invalid',
+          focusTargetMin: 999,
+          notifyOnTimer: false,
           lanShare: { enabled: true, port: 1 },
           present: { showNotes: false, showClock: false },
         },
@@ -98,6 +102,10 @@ describe('normalizeBoard', () => {
     expect(parsed.goals[0]?.progress).toBe(100);
     expect(parsed.notesPrivate).toBe(true);
     expect(parsed.settings.fontScale).toBe(1.3);
+    expect(parsed.settings.boardName).toBe('Studio');
+    expect(parsed.settings.clockFormat).toBe('system');
+    expect(parsed.settings.focusTargetMin).toBe(480);
+    expect(parsed.settings.notifyOnTimer).toBe(false);
     expect(parsed.settings.lanShare).toEqual({ enabled: true, port: 1024 });
     expect(parsed.settings.present.showNotes).toBe(false);
     expect(parsed.settings.present.showClock).toBe(false);
@@ -115,5 +123,46 @@ describe('normalizeBoard', () => {
 
     expect(parsed.settings.accent).toBe('rose');
     expect(parsed.settings.closeToTray).toBe(true);
+  });
+
+  it('upgrades old boards with no return time and keeps the sleep scene kind', () => {
+    const oldBoard = normalizeBoard(
+      {
+        version: 1,
+        tasks: [],
+        current: {
+          label: 'Developing',
+          emoji: '💻',
+          color: '#4ADE9D',
+          kind: 'focus',
+          since: NOW - 1000,
+        },
+      },
+      NOW,
+    );
+    expect(oldBoard.version).toBe(STATE_VERSION);
+    expect(oldBoard.current.returnAt).toBeNull();
+    expect(oldBoard.settings.boardName).toBe('Now Board');
+    expect(oldBoard.settings.clockFormat).toBe('system');
+    expect(oldBoard.settings.focusTargetMin).toBe(240);
+    expect(oldBoard.settings.notifyOnTimer).toBe(true);
+
+    const sleeping = normalizeBoard(
+      {
+        version: 1,
+        tasks: [],
+        current: {
+          label: 'Sleeping',
+          emoji: '😴',
+          color: '#8A93A6',
+          kind: 'sleep',
+          since: NOW - 1000,
+          returnAt: NOW + 8 * 3600_000,
+        },
+      },
+      NOW,
+    );
+    expect(sleeping.current.kind).toBe('sleep');
+    expect(sleeping.current.returnAt).toBe(NOW + 8 * 3600_000);
   });
 });

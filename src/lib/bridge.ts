@@ -96,6 +96,8 @@ export interface NowBoardBridge {
   setLoginItem: (value: boolean) => Promise<LoginItemResult>;
   setKeepAwake: (value: boolean) => Promise<{ ok: boolean }>;
   setCloseToTray: (value: boolean) => Promise<boolean>;
+  setTrayStatus: (text: string) => void;
+  notify: (payload: { title: string; body: string }) => void;
   createDesktopShortcut: () => Promise<DesktopShortcutResult>;
 
   configureShortcuts: (enabled: boolean) => Promise<ShortcutStatus>;

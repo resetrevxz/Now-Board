@@ -1,7 +1,26 @@
-export type AppHotkeyAction = 'toggle-present' | 'toggle-panic';
+export type AppHotkeyAction =
+  | 'toggle-present'
+  | 'toggle-panic'
+  | 'quick-add'
+  | 'timer-toggle'
+  | 'mode-focus'
+  | 'mode-break'
+  | 'mode-away'
+  | 'mode-sleep';
+
+const HOTKEY_ACTIONS: AppHotkeyAction[] = [
+  'toggle-present',
+  'toggle-panic',
+  'quick-add',
+  'timer-toggle',
+  'mode-focus',
+  'mode-break',
+  'mode-away',
+  'mode-sleep',
+];
 
 export function isAppHotkeyAction(value: string): value is AppHotkeyAction {
-  return value === 'toggle-present' || value === 'toggle-panic';
+  return (HOTKEY_ACTIONS as string[]).includes(value);
 }
 
 /**

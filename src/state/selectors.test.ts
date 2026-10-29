@@ -68,9 +68,15 @@ describe('buildPresentViewModel privacy', () => {
     ];
     board.notes = 'A private note';
     board.notesPrivate = true;
+    board.settings.boardName = 'Studio';
+    board.settings.clockFormat = '24h';
+    board.settings.focusTargetMin = 120;
 
     const view = buildPresentViewModel(board, NOW);
 
+    expect(view.settings.boardName).toBe('Studio');
+    expect(view.settings.clockFormat).toBe('24h');
+    expect(view.settings.focusTargetMin).toBe(120);
     expect(view.nowTask?.id).toBe('public');
     expect(view.upNext.map((task) => task.id)).not.toContain('secret_task');
     expect(view.taskStats).toEqual({ done: 1, total: 2 });
@@ -94,6 +100,47 @@ describe('buildPresentViewModel privacy', () => {
     expect(view.nowTask).toBeNull();
     expect(view.upNext.length).toBeGreaterThan(0);
   });
+
+  it.each(['break', 'away', 'sleep'] as const)(
+    'scrubs work content from the public snapshot in %s mode',
+    (kind) => {
+      const board = state();
+      const preset = board.presets.find((entry) => entry.kind === kind);
+      if (!preset) throw new Error(`Missing ${kind} preset`);
+      board.current = {
+        ...board.current,
+        presetId: preset.id,
+        label: preset.label,
+        emoji: preset.emoji,
+        color: preset.color,
+        kind,
+        returnAt: NOW + 15 * 60_000,
+      };
+      board.notes = 'A public note that should still be hidden';
+      board.notesPrivate = false;
+
+      const view = buildPresentViewModel(board, NOW);
+      const serialized = JSON.stringify(view);
+
+      expect(view.status.kind).toBe(kind);
+      expect(view.status.returnAt).toBe(NOW + 15 * 60_000);
+      expect(view.goals).toEqual([]);
+      expect(view.nowTask).toBeNull();
+      expect(view.upNext).toEqual([]);
+      expect(view.taskStats).toEqual({ done: 0, total: 0 });
+      expect(view.note).toBeNull();
+      expect(view.timeline).toEqual({
+        segments: [],
+        totals: [],
+        totalTrackedMs: 0,
+        focusMs: 0,
+      });
+      expect(view.streakDays).toBe(0);
+      expect(view.settings.focusTargetMin).toBe(0);
+      expect(serialized).not.toContain('Ship Now Board');
+      expect(serialized).not.toContain('A public note that should still be hidden');
+    },
+  );
 });
 
 describe('timeline and streak', () => {

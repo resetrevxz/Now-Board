@@ -4,6 +4,7 @@ const {
   app,
   BrowserWindow,
   Menu,
+  Notification,
   Tray,
   dialog,
   globalShortcut,
@@ -284,6 +285,20 @@ function createTray() {
       Menu.buildFromTemplate([
         { label: 'Open Now Board', click: () => showMainWindow() },
         {
+          label: 'Capture a task…',
+          click: () => {
+            showMainWindow();
+            sendHotkey('quick-add');
+          },
+        },
+        {
+          label: 'Pause or resume timer',
+          click: () => {
+            showMainWindow();
+            sendHotkey('timer-toggle');
+          },
+        },
+        {
           label: 'Toggle Present',
           click: () => {
             showMainWindow();
@@ -296,6 +311,39 @@ function createTray() {
             showMainWindow();
             sendHotkey('toggle-panic');
           },
+        },
+        {
+          label: 'Quick modes',
+          submenu: [
+            {
+              label: 'Start focus (25 min)',
+              click: () => {
+                showMainWindow();
+                sendHotkey('mode-focus');
+              },
+            },
+            {
+              label: 'Take a break (15 min)',
+              click: () => {
+                showMainWindow();
+                sendHotkey('mode-break');
+              },
+            },
+            {
+              label: 'Step away (30 min)',
+              click: () => {
+                showMainWindow();
+                sendHotkey('mode-away');
+              },
+            },
+            {
+              label: 'Sleeping',
+              click: () => {
+                showMainWindow();
+                sendHotkey('mode-sleep');
+              },
+            },
+          ],
         },
         { type: 'separator' },
         {
@@ -450,6 +498,13 @@ function registerGlobalShortcuts(enabled) {
     ['CommandOrControl+Shift+P', () => sendHotkey('toggle-present')],
     ['CommandOrControl+Shift+B', () => sendHotkey('toggle-panic')],
     ['CommandOrControl+Alt+O', () => showMainWindow()],
+    [
+      'CommandOrControl+Alt+N',
+      () => {
+        showMainWindow();
+        sendHotkey('quick-add');
+      },
+    ],
   ];
   for (const [accelerator, action] of bindings) {
     try {
@@ -717,6 +772,21 @@ ipcMain.handle('app:set-keep-awake', (_event, value) => {
 ipcMain.handle('app:set-close-to-tray', (_event, value) => {
   closeToTray = Boolean(value);
   return closeToTray;
+});
+
+ipcMain.on('app:tray-status', (_event, text) => {
+  if (!tray || typeof text !== 'string') return;
+  tray.setToolTip(text.slice(0, 96));
+});
+
+ipcMain.on('app:notify', (_event, payload) => {
+  if (!Notification.isSupported()) return;
+  const title = typeof payload?.title === 'string' ? payload.title.slice(0, 80) : '';
+  const body = typeof payload?.body === 'string' ? payload.body.slice(0, 240) : '';
+  if (!title) return;
+  const notification = new Notification({ title, body, silent: false });
+  notification.on('click', () => showMainWindow());
+  notification.show();
 });
 
 ipcMain.handle('app:create-desktop-shortcut', () => {

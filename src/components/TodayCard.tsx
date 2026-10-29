@@ -11,6 +11,9 @@ import { cx } from '../lib/cx';
 import { Icon } from './Icon';
 import { ProgressBar } from './ui';
 
+const FOCUS_DURATIONS = [25, 50, 90];
+const BREAK_DURATIONS = [5, 10, 15];
+
 export function TodayCard({
   state,
   dispatch,
@@ -19,13 +22,16 @@ export function TodayCard({
   dispatch: (action: Action) => void;
 }) {
   const now = useNow(1000);
-  const clock = clockParts(now);
+  const clock = clockParts(now, state.settings.clockFormat);
   const remaining = focusRemainingSeconds(state, now);
   const progress =
     state.focus.durationSec > 0
       ? ((state.focus.durationSec - remaining) / state.focus.durationSec) * 100
       : 0;
   const timeline = buildTimeline(state.sessions, now);
+  const focusTargetMs = state.settings.focusTargetMin * 60_000;
+  const focusTargetProgress =
+    focusTargetMs > 0 ? Math.min(100, (timeline.focusMs / focusTargetMs) * 100) : 0;
   const streak = computeStreak(state.sessions, now);
   const totalTasks = state.tasks.length;
   const doneTasks = state.tasks.filter((task) => task.done).length;
@@ -54,9 +60,12 @@ export function TodayCard({
   };
 
   const switchMode = (mode: FocusMode) => {
-    if (state.focus.mode === mode && !running) return;
+    if (state.focus.mode === mode) return;
     dispatch({ type: 'focus/reset', mode });
   };
+
+  const durationOptions = state.focus.mode === 'focus' ? FOCUS_DURATIONS : BREAK_DURATIONS;
+  const activeMinutes = Math.round(state.focus.durationSec / 60);
 
   return (
     <aside className="today-card" aria-label="Today at a glance">
@@ -131,6 +140,32 @@ export function TodayCard({
           label="Focus timer progress"
           color={state.focus.mode === 'break' ? 'var(--warning)' : undefined}
         />
+        <div className="focus-presets" role="group" aria-label={`${state.focus.mode} duration`}>
+          {durationOptions.map((minutes) => (
+            <button
+              key={minutes}
+              type="button"
+              className={cx('focus-preset', activeMinutes === minutes && 'is-active')}
+              aria-pressed={activeMinutes === minutes}
+              title={`${minutes} minute ${state.focus.mode}`}
+              onClick={() => {
+                if (activeMinutes === minutes) return;
+                dispatch({
+                  type: 'focus/reset',
+                  mode: state.focus.mode,
+                  durationSec: minutes * 60,
+                });
+              }}
+            >
+              {minutes}m
+            </button>
+          ))}
+          <span className="focus-presets__cycles">
+            {state.focus.completedSessions > 0
+              ? `${state.focus.completedSessions} done`
+              : 'One thing at a time'}
+          </span>
+        </div>
       </div>
 
       <div className="today-stats">
@@ -143,7 +178,17 @@ export function TodayCard({
         </div>
         <div className="today-stat">
           <span className="today-stat__label">Focus</span>
-          <span className="today-stat__value">{formatDuration(timeline.focusMs)}</span>
+          <span className="today-stat__value">
+            {formatDuration(timeline.focusMs)}
+            {focusTargetMs > 0 ? (
+              <span className="today-stat__target">/ {formatDuration(focusTargetMs)}</span>
+            ) : null}
+          </span>
+          {focusTargetMs > 0 ? (
+            <span className="today-stat__meter" aria-hidden="true">
+              <span style={{ width: `${focusTargetProgress}%` }} />
+            </span>
+          ) : null}
         </div>
         <div className="today-stat">
           <span className="today-stat__label">Streak</span>

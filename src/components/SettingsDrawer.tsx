@@ -3,6 +3,7 @@ import type {
   Action,
   AccentMode,
   BoardState,
+  ClockFormat,
   Density,
   ThemeMode,
   BackgroundStyle,
@@ -10,7 +11,7 @@ import type {
 } from '../state/types';
 import { ACCENT_LABELS, ACCENT_PALETTES } from '../state/defaults';
 import type { BoardFileInfo, ShareInfo, ShortcutStatus } from '../lib/bridge';
-import { formatClock, formatDate, relativeTime } from '../state/time';
+import { formatClock, formatDate, formatDuration, relativeTime } from '../state/time';
 import type { SaveState } from '../hooks/useBoard';
 import { getBridge } from '../lib/bridge';
 import { useToast } from './Toasts';
@@ -118,6 +119,7 @@ export function SettingsDrawer({
 }) {
   const { notify } = useToast();
   const [portDraft, setPortDraft] = useState(String(state.settings.lanShare.port));
+  const [boardNameDraft, setBoardNameDraft] = useState(state.settings.boardName);
   const [shortcutBusy, setShortcutBusy] = useState(false);
   const bridge = getBridge();
   const settings = state.settings;
@@ -125,6 +127,10 @@ export function SettingsDrawer({
   useEffect(() => {
     if (open) setPortDraft(String(settings.lanShare.port));
   }, [open, settings.lanShare.port]);
+
+  useEffect(() => {
+    if (open) setBoardNameDraft(settings.boardName);
+  }, [open, settings.boardName]);
 
   const portValue = Number(portDraft);
   const portValid =
@@ -140,6 +146,12 @@ export function SettingsDrawer({
     value: boolean,
   ) => {
     dispatch({ type: 'settings/update', patch: { present: { [key]: value } } });
+  };
+
+  const commitBoardName = () => {
+    const next = boardNameDraft.replace(/\s+/g, ' ').trim() || 'Now Board';
+    setBoardNameDraft(next);
+    if (next !== settings.boardName) update({ boardName: next });
   };
 
   const copy = async (value: string, label: string) => {
@@ -219,6 +231,29 @@ export function SettingsDrawer({
                 { value: 'dark', label: 'Dark', icon: 'moon' },
                 { value: 'light', label: 'Light', icon: 'sun' },
               ]}
+            />
+          </div>
+
+          <div className="settings-row">
+            <div className="settings-row__copy">
+              <span className="settings-row__title">Board name</span>
+              <span className="settings-row__detail">Shown in the Present header and tray tooltip.</span>
+            </div>
+            <input
+              className="input settings-text-input"
+              type="text"
+              maxLength={40}
+              value={boardNameDraft}
+              aria-label="Board name"
+              onChange={(event) => setBoardNameDraft(event.target.value)}
+              onBlur={commitBoardName}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') {
+                  event.preventDefault();
+                  commitBoardName();
+                  event.currentTarget.blur();
+                }
+              }}
             />
           </div>
 
@@ -329,6 +364,22 @@ export function SettingsDrawer({
         description="What the second monitor shows. Private items are always excluded."
       >
         <div className="settings-group">
+          <div className="settings-row">
+            <div className="settings-row__copy">
+              <span className="settings-row__title">Clock</span>
+              <span className="settings-row__detail">Use the system format or force 12/24-hour time.</span>
+            </div>
+            <Segmented<ClockFormat>
+              label="Clock format"
+              value={settings.clockFormat}
+              onChange={(clockFormat) => update({ clockFormat })}
+              options={[
+                { value: 'system', label: 'System' },
+                { value: '12h', label: '12h' },
+                { value: '24h', label: '24h' },
+              ]}
+            />
+          </div>
           {PRESENT_TOGGLES.map((item) => (
             <InlineToggle
               key={item.key}
@@ -338,6 +389,50 @@ export function SettingsDrawer({
               onChange={(value) => updatePresent(item.key, value)}
             />
           ))}
+        </div>
+        <p className="settings-note">
+          Break, away and Sleeping scenes are intentionally quieter. Objectives, tasks and notes
+          stay hidden until you return to a focus status.
+        </p>
+      </SettingsSection>
+
+      <SettingsSection
+        icon="target"
+        title="Focus rhythm"
+        description="A gentle daily target, and a nudge when a timer or return time finishes."
+      >
+        <div className="settings-group">
+          <div className="settings-slider-row">
+            <div className="settings-slider-head">
+              <span className="settings-row__title">Daily focus goal</span>
+              <span className="settings-slider-value">
+                {settings.focusTargetMin > 0
+                  ? formatDuration(settings.focusTargetMin * 60_000)
+                  : 'Off'}
+              </span>
+            </div>
+            <input
+              className="range"
+              type="range"
+              min={0}
+              max={480}
+              step={30}
+              value={settings.focusTargetMin}
+              aria-label="Daily focus goal"
+              style={
+                {
+                  ['--range-progress' as string]: `${(settings.focusTargetMin / 480) * 100}%`,
+                } as CSSProperties
+              }
+              onChange={(event) => update({ focusTargetMin: Number(event.target.value) })}
+            />
+          </div>
+          <InlineToggle
+            label="Desktop notifications"
+            detail="Notify when a focus session ends or a return/wake time arrives. Local only."
+            checked={settings.notifyOnTimer}
+            onChange={(notifyOnTimer) => update({ notifyOnTimer })}
+          />
         </div>
       </SettingsSection>
 
@@ -408,6 +503,14 @@ export function SettingsDrawer({
               <Kbd>Ctrl</Kbd>
               <Kbd>Alt</Kbd>
               <Kbd>O</Kbd>
+            </span>
+          </div>
+          <div className="hotkey-row">
+            <span>Quick capture a task</span>
+            <span className="hotkey-row__keys">
+              <Kbd>Ctrl</Kbd>
+              <Kbd>Alt</Kbd>
+              <Kbd>N</Kbd>
             </span>
           </div>
           <div className="hotkey-row">

@@ -14,6 +14,7 @@ import {
   startFreshStorage,
 } from '../state/storage';
 import { buildPresentViewModel } from '../state/selectors';
+import { formatClockLabel } from '../state/time';
 
 export type LoadPhase = 'loading' | 'ready' | 'error';
 export type SaveState = 'idle' | 'saving' | 'saved' | 'error';
@@ -291,6 +292,20 @@ export function useBoard(): UseBoard {
     if (!bridge || closeToTray === undefined) return;
     void bridge.setCloseToTray(closeToTray);
   }, [bridge, closeToTray]);
+
+  const statusLabel = state?.current.label;
+  const statusReturnAt = state?.current.returnAt;
+  const statusKind = state?.current.kind;
+  const boardName = state?.settings.boardName;
+  const clockFormat = state?.settings.clockFormat;
+  useEffect(() => {
+    if (!bridge || statusLabel === undefined) return;
+    const verb = statusKind === 'sleep' ? 'wake' : 'back';
+    const suffix = statusReturnAt
+      ? ` · ${verb} ${formatClockLabel(statusReturnAt, clockFormat)}`
+      : '';
+    bridge.setTrayStatus(`${boardName ?? 'Now Board'} · ${statusLabel}${suffix}`);
+  }, [boardName, bridge, clockFormat, statusKind, statusLabel, statusReturnAt]);
 
   const globalHotkeys = state?.settings.globalHotkeys;
   useEffect(() => {

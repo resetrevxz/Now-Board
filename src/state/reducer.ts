@@ -70,12 +70,15 @@ function setStatus(
   subline: string | undefined,
   at: number,
   presetId: string | null,
+  returnInMinutes?: number | null,
 ): BoardState {
   const label = cleanLine(preset.label, 48, state.current.label) || 'Developing';
   const emoji = cleanLine(preset.emoji, 8, '•');
   const color = isHexColor(preset.color) ? preset.color : state.current.color;
   const kind: StatusKind =
-    preset.kind === 'break' || preset.kind === 'away' ? preset.kind : 'focus';
+    preset.kind === 'break' || preset.kind === 'away' || preset.kind === 'sleep'
+      ? preset.kind
+      : 'focus';
   const nextSubline =
     subline === undefined ? state.current.subline : cleanLine(subline, 120, '');
 
@@ -86,11 +89,20 @@ function setStatus(
     state.current.kind === kind &&
     state.current.presetId === presetId;
 
+  const returnAt =
+    returnInMinutes === undefined
+      ? unchanged
+        ? state.current.returnAt
+        : null
+      : returnInMinutes === null
+        ? null
+        : at + Math.round(clampNumber(returnInMinutes, 1, 24 * 60, 15)) * 60 * 1000;
+
   if (unchanged) {
     return touch(
       {
         ...state,
-        current: { ...state.current, subline: nextSubline },
+        current: { ...state.current, subline: nextSubline, returnAt },
       },
       at,
     );
@@ -112,6 +124,7 @@ function setStatus(
         kind,
         since: at,
         subline: nextSubline,
+        returnAt,
       },
       sessions,
     },
@@ -192,6 +205,13 @@ function mergeSettings(base: Settings, patch: SettingsPatch): Settings {
   return {
     ...next,
     fontScale: clampNumber(next.fontScale, 0.85, 1.3, base.fontScale),
+    boardName: cleanLine(next.boardName, 40, base.boardName),
+    clockFormat:
+      next.clockFormat === '12h' || next.clockFormat === '24h' ? next.clockFormat : 'system',
+    focusTargetMin: Math.round(
+      clampNumber(next.focusTargetMin, 0, 8 * 60, base.focusTargetMin),
+    ),
+    notifyOnTimer: Boolean(next.notifyOnTimer),
     lanShare: {
       enabled: Boolean(next.lanShare.enabled),
       port: Math.round(clampNumber(next.lanShare.port, 1024, 65535, 4781)),
@@ -244,7 +264,14 @@ export function reducer(state: BoardState, action: Action): BoardState {
 
     case 'status/set': {
       const at = action.at ?? Date.now();
-      return setStatus(state, action.preset, action.subline, at, action.preset.id);
+      return setStatus(
+        state,
+        action.preset,
+        action.subline,
+        at,
+        action.preset.id,
+        action.returnInMinutes,
+      );
     }
 
     case 'status/custom': {
@@ -256,7 +283,14 @@ export function reducer(state: BoardState, action: Action): BoardState {
         color: action.color,
         kind: action.kind,
       };
-      return setStatus(state, preset, action.subline, at, null);
+      return setStatus(
+        state,
+        preset,
+        action.subline,
+        at,
+        null,
+        action.returnInMinutes,
+      );
     }
 
     case 'status/subline':
@@ -264,6 +298,21 @@ export function reducer(state: BoardState, action: Action): BoardState {
         ...state,
         current: { ...state.current, subline: cleanLine(action.subline, 120, '') },
       });
+
+    case 'status/returnIn': {
+      const at = action.at ?? Date.now();
+      const returnAt =
+        action.minutes === null
+          ? null
+          : at + Math.round(clampNumber(action.minutes, 1, 24 * 60, 15)) * 60 * 1000;
+      return touch(
+        {
+          ...state,
+          current: { ...state.current, returnAt },
+        },
+        at,
+      );
+    }
 
     case 'status/resetTimer': {
       const at = action.at ?? Date.now();

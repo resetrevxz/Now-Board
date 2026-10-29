@@ -54,6 +54,10 @@ export function TasksPanel({
   const completed = listTasks.filter((task) => task.done);
   const nowTask = state.tasks.find((task) => task.isNow && !task.done) ?? null;
   const nowList = nowTask ? state.lists.find((list) => list.id === nowTask.listId) : null;
+  const listedIncomplete =
+    nowTask && nowTask.listId === activeListId
+      ? incomplete.filter((task) => task.id !== nowTask.id)
+      : incomplete;
 
   const { notify } = useToast();
   const [title, setTitle] = useState('');
@@ -139,13 +143,13 @@ export function TasksPanel({
 
   const handleRowKey = (event: ReactKeyboardEvent<HTMLDivElement>, task: Task) => {
     if (event.target !== event.currentTarget) return;
-    const index = incomplete.findIndex((entry) => entry.id === task.id);
+    const index = listedIncomplete.findIndex((entry) => entry.id === task.id);
 
     if (event.altKey && (event.key === 'ArrowUp' || event.key === 'ArrowDown')) {
       event.preventDefault();
       if (index < 0) return;
       if (event.key === 'ArrowUp') {
-        const before = incomplete[index - 1];
+        const before = listedIncomplete[index - 1];
         if (before) {
           dispatch({
             type: 'task/reorder',
@@ -155,13 +159,13 @@ export function TasksPanel({
           });
         }
       } else {
-        const target = incomplete[index + 1];
+        const target = listedIncomplete[index + 1];
         if (target) {
           dispatch({
             type: 'task/reorder',
             listId: activeListId,
             taskId: task.id,
-            beforeId: incomplete[index + 2]?.id ?? null,
+            beforeId: listedIncomplete[index + 2]?.id ?? null,
           });
         }
       }
@@ -225,8 +229,8 @@ export function TasksPanel({
       return;
     }
     const before = dropTarget?.id === task.id ? dropTarget.before : true;
-    const targetIndex = incomplete.findIndex((entry) => entry.id === task.id);
-    const beforeId = before ? task.id : (incomplete[targetIndex + 1]?.id ?? null);
+    const targetIndex = listedIncomplete.findIndex((entry) => entry.id === task.id);
+    const beforeId = before ? task.id : (listedIncomplete[targetIndex + 1]?.id ?? null);
     dispatch({ type: 'task/reorder', listId: activeListId, taskId: moving, beforeId });
     setDraggingId(null);
     setDropTarget(null);
@@ -617,17 +621,21 @@ export function TasksPanel({
           </div>
         ) : (
           <>
-            {incomplete.length > 0 ? (
+            {listedIncomplete.length > 0 ? (
               <div className="task-list" role="list" aria-label={`${activeList?.name ?? 'List'} tasks`}>
-                {incomplete.map((task, index) => renderTask(task, index))}
+                {listedIncomplete.map((task, index) => renderTask(task, index))}
               </div>
             ) : (
               <div className="task-empty">
                 <EmptyState
                   compact
                   icon="sparkles"
-                  title="All clear on this list"
-                  detail="Nothing open. Enjoy the quiet, or add what comes next."
+                  title={incomplete.length > 0 ? 'Nothing after this' : 'All clear on this list'}
+                  detail={
+                    incomplete.length > 0
+                      ? 'Your Now task is pinned above. Keep it to one thing.'
+                      : 'Nothing open. Enjoy the quiet, or add what comes next.'
+                  }
                 />
               </div>
             )}

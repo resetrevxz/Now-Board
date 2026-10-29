@@ -12,6 +12,7 @@ export function Titlebar({
   saveError,
   lastSavedAt,
   maximized,
+  boardName,
   onPresent,
   onOpenPalette,
   onOpenSettings,
@@ -21,6 +22,7 @@ export function Titlebar({
   saveError: string | null;
   lastSavedAt: number | null;
   maximized: boolean;
+  boardName: string;
   onPresent: () => void;
   onOpenPalette: () => void;
   onOpenSettings: () => void;
@@ -43,7 +45,7 @@ export function Titlebar({
           <span className="brand-mark">
             <BrandMark />
           </span>
-          <span className="brand-name">Now Board</span>
+          <span className="brand-name">{boardName}</span>
           <span className="mode-tag">Edit</span>
         </div>
         <span className="titlebar__context" aria-hidden="true">

@@ -72,6 +72,15 @@ async function closeOverlay(page) {
   await page.waitForTimeout(300);
 }
 
+async function setQuickReturn(page, minutes) {
+  await page.getByRole('button', { name: 'Add return time' }).click();
+  await page
+    .getByRole('dialog', { name: 'Return time' })
+    .getByRole('button', { name: new RegExp(`^${minutes}m`) })
+    .click();
+  await page.waitForTimeout(250);
+}
+
 async function choose(page, group, name) {
   await page
     .getByRole('group', { name: group })
@@ -139,8 +148,58 @@ try {
     await page.waitForSelector('.present', { timeout: 10_000 });
     await shot(page, `present-${tag}`);
 
-    await page.keyboard.press('Escape');
-    await page.waitForSelector('.edit-shell', { timeout: 10_000 });
+    await closePresent(page);
+    await page.keyboard.press('6');
+    await page.waitForTimeout(250);
+    await setQuickReturn(page, 15);
+    await openPresent(page);
+    await shot(page, `present-break-${tag}`);
+    if (variants) {
+      const breakText = await page.locator('.present').innerText();
+      const breakWork = await page
+        .locator('.present-goal, .present-tasks, .present-note, .present-timeline')
+        .count();
+      check(breakWork === 0, 'break scene hides objectives and work');
+      check(!breakText.includes('Ship Now Board v1'), 'break scene hides the seeded goal');
+      check(breakText.includes('Back at'), 'break scene shows the return time');
+    }
+    await closePresent(page);
+
+    await page.keyboard.press('7');
+    await page.waitForTimeout(250);
+    await setQuickReturn(page, 30);
+    await openPresent(page);
+    await shot(page, `present-away-${tag}`);
+    if (variants) {
+      const awayWork = await page
+        .locator('.present-goal, .present-tasks, .present-note, .present-timeline')
+        .count();
+      check(awayWork === 0, 'away scene hides objectives and work');
+    }
+    await closePresent(page);
+
+    await page.keyboard.press('8');
+    await page.waitForTimeout(250);
+    await openPresent(page);
+    await shot(page, `present-sleep-${tag}`);
+    if (variants) {
+      const sleepText = await page.locator('.present').innerText();
+      check(
+        (await page.locator('.present--sleep').count()) === 1,
+        'sleeping uses the dedicated quiet scene',
+      );
+      check(!sleepText.includes('Ship Now Board v1'), 'sleep scene hides the seeded goal');
+      check(
+        (await page
+          .locator('.present-goal, .present-tasks, .present-note, .present-timeline')
+          .count()) === 0,
+        'sleep scene hides objectives and work',
+      );
+    }
+    await closePresent(page);
+
+    await page.keyboard.press('1');
+    await page.waitForTimeout(250);
     await shot(page, `edit-return-${tag}`);
 
     await page.keyboard.press('Control+Shift+B');
@@ -173,6 +232,25 @@ try {
       (await page.getByRole('button', { name: 'Start focus timer' }).count()) === 1,
       'Shift+F resets the focus timer',
     );
+
+    await page.keyboard.press('b');
+    await page.waitForTimeout(250);
+    check(
+      (await page.locator('.status-title').innerText()) === 'On a break',
+      'B enters a quick break without leaving Edit',
+    );
+    await page.keyboard.press('r');
+    await page.waitForTimeout(250);
+    check(
+      (await page.locator('.status-title').innerText()) === 'Developing',
+      'R returns to focus from a break',
+    );
+    check(
+      (await page.getByRole('button', { name: 'Pause focus timer' }).count()) === 1,
+      'R starts a focus session',
+    );
+    await page.keyboard.press('Shift+F');
+    await page.waitForTimeout(200);
 
     await openSettings(page);
     const accentCount = await page
@@ -215,6 +293,10 @@ try {
 
     await openSettings(page);
     await setTextScale(page, 100);
+    await closeOverlay(page);
+
+    await page.getByRole('button', { name: 'Add return time' }).click();
+    await shot(page, 'return-menu-1280x800');
     await closeOverlay(page);
 
     await page.keyboard.press('Control+k');

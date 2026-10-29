@@ -110,6 +110,12 @@
   font-variant-numeric: tabular-nums;
 }
 
+.present-clock__period {
+  margin-left: 0.15em;
+  color: var(--text-3);
+  font-size: 0.5em;
+}
+
 .present-clock__date {
   margin-top: 0.45em;
   color: var(--text-3);
@@ -381,6 +387,16 @@
   font-size: 0.82em;
 }
 
+.present-today__caption.is-goal-met {
+  color: var(--accent-text);
+  font-weight: 560;
+}
+
+.present-today__goal {
+  max-width: 13em;
+  margin-top: 0.65em;
+}
+
 .present-today__tasks {
   display: flex;
   flex-direction: column;
@@ -406,6 +422,175 @@
 .present-today .progress {
   height: 0.22em;
   background: color-mix(in srgb, var(--text) 10%, transparent);
+}
+
+/* Quiet scenes ------------------------------------------------------------- */
+
+.present__frame--quiet {
+  gap: clamp(12px, 2.1vh, 26px);
+}
+
+.present-hero--quiet {
+  grid-template-columns: minmax(0, 1.45fr) minmax(260px, 0.55fr);
+  align-items: stretch;
+  flex: 1;
+  min-height: 0;
+}
+
+.present-hero--quiet .present-status {
+  justify-content: center;
+  padding-bottom: 0;
+}
+
+.present-hero--quiet .present-status__glow {
+  opacity: 0.075;
+}
+
+.present-calm {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: clamp(7px, 1.1vh, 15px);
+  min-width: 0;
+  padding-left: clamp(24px, 3.2vw, 62px);
+  border-left: 1px solid var(--line);
+}
+
+.present-calm__eyebrow {
+  display: flex;
+  align-items: center;
+  gap: 0.6em;
+  color: var(--accent-text);
+  font-size: 0.62em;
+  font-weight: 680;
+  letter-spacing: 0.17em;
+  text-transform: uppercase;
+}
+
+.present-calm__eyebrow svg {
+  opacity: 0.85;
+}
+
+.present-calm__value,
+.present-calm__clock {
+  color: var(--text);
+  font-size: clamp(48px, 5.7vw, 136px);
+  font-weight: 440;
+  letter-spacing: -0.056em;
+  line-height: 0.94;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+.present-calm__caption {
+  color: var(--text-3);
+  font-size: clamp(13px, 0.88vw, 20px);
+  font-variant-numeric: tabular-nums;
+}
+
+.present-calm__prompt {
+  max-width: 19em;
+  margin-top: clamp(8px, 1.6vh, 20px);
+  color: var(--text-3);
+  font-size: clamp(13px, 0.9vw, 21px);
+  line-height: 1.5;
+}
+
+.present-calm__breath {
+  position: relative;
+  width: clamp(54px, 4.4vw, 94px);
+  aspect-ratio: 1;
+  margin-top: clamp(10px, 2vh, 24px);
+}
+
+.present-calm__breath span {
+  position: absolute;
+  inset: 0;
+  border: 1px solid color-mix(in srgb, var(--accent) 34%, transparent);
+  border-radius: 50%;
+  animation: break-breathe 7s var(--ease-in-out) infinite;
+}
+
+.present-calm__breath span:nth-child(2) {
+  inset: 18%;
+  animation-delay: -2.35s;
+}
+
+.present-calm__breath span:nth-child(3) {
+  inset: 36%;
+  animation-delay: -4.7s;
+}
+
+@keyframes break-breathe {
+  0%,
+  100% {
+    opacity: 0.14;
+    transform: scale(0.86);
+  }
+  50% {
+    opacity: 0.72;
+    transform: scale(1);
+  }
+}
+
+.present-calm__moon {
+  color: var(--accent-text);
+  font-size: clamp(56px, 5.5vw, 128px);
+  line-height: 0.8;
+  text-shadow: 0 0 80px color-mix(in srgb, var(--accent) 24%, transparent);
+}
+
+.present-calm--sleep .present-calm__clock {
+  margin-top: 0.1em;
+}
+
+.present--sleep .present-status__title {
+  color: var(--text-2);
+}
+
+.present--sleep .present-status__glow {
+  opacity: 0.045;
+}
+
+.present--sleep .present__topline {
+  opacity: 0.25;
+}
+
+.present--sleep .present-brand__live {
+  color: var(--text-4);
+}
+
+.present-quiet__foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1.4em;
+  flex: none;
+  padding-top: clamp(12px, 1.7vh, 20px);
+  border-top: 1px solid var(--line-soft);
+  color: var(--text-4);
+  font-size: 0.6em;
+  letter-spacing: 0.03em;
+}
+
+.present-quiet__foot-copy,
+.present-quiet__privacy {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55em;
+  min-width: 0;
+}
+
+.present-quiet__foot-copy svg,
+.present-quiet__privacy svg {
+  opacity: 0.72;
+}
+
+.present-quiet__privacy {
+  flex: none;
+  color: var(--text-3);
+  font-weight: 540;
 }
 
 /* Main grid ---------------------------------------------------------------- */
@@ -1024,6 +1209,10 @@
     gap: clamp(20px, 3vw, 42px);
   }
 
+  .present-hero--quiet {
+    grid-template-columns: minmax(0, 1.35fr) minmax(230px, 0.65fr);
+  }
+
   .present-today {
     padding-left: clamp(16px, 2vw, 28px);
   }
@@ -1107,6 +1296,44 @@
   .present-hero {
     grid-template-columns: minmax(0, 1fr);
     gap: 10px;
+  }
+
+  .present-hero--quiet {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 13px;
+  }
+
+  .present-hero--quiet .present-status {
+    justify-content: flex-start;
+  }
+
+  .present-calm {
+    justify-content: flex-start;
+    gap: 6px;
+    padding: 13px 0 0;
+    border-top: 1px solid var(--line);
+    border-left: 0;
+  }
+
+  .present-calm__value,
+  .present-calm__clock {
+    font-size: clamp(38px, 8vw, 68px);
+  }
+
+  .present-calm__prompt {
+    margin-top: 4px;
+    font-size: 12px;
+    line-height: 1.45;
+  }
+
+  .present-calm__breath {
+    display: none;
+  }
+
+  .present-quiet__foot {
+    flex-wrap: wrap;
+    gap: 6px 14px;
+    font-size: 9.5px;
   }
 
   .present-today {
@@ -1289,6 +1516,20 @@
     font-size: clamp(54px, 6.8vw, 150px);
   }
 
+  .present-hero--quiet .present-status__title {
+    font-size: clamp(44px, 6vw, 118px);
+  }
+
+  .present-calm__value,
+  .present-calm__clock {
+    font-size: clamp(38px, 4.7vw, 86px);
+  }
+
+  .present-calm__prompt {
+    margin-top: 7px;
+    font-size: clamp(12px, 0.8vw, 17px);
+  }
+
   .present-note__text {
     font-size: clamp(17px, 1.35vw, 28px);
   }
@@ -1301,6 +1542,20 @@
 @media (max-height: 720px) {
   .present-status__title {
     font-size: clamp(46px, 6.2vw, 110px);
+  }
+
+  .present-hero--quiet .present-status__title {
+    font-size: clamp(38px, 5.7vw, 96px);
+  }
+
+  .present-calm__value,
+  .present-calm__clock {
+    font-size: clamp(34px, 4.4vw, 68px);
+  }
+
+  .present-calm__breath,
+  .present-calm__prompt {
+    display: none;
   }
 
   .present-hero {
@@ -1336,7 +1591,12 @@
   .present-status__title,
   .present-task-row,
   .mode-hint,
+  .present-calm__breath span,
   .present--enter .present__frame {
     animation: none;
   }
+}
+
+[data-reduce-motion='true'] .present-calm__breath span {
+  animation: none;
 }

@@ -12,14 +12,37 @@ is required.
 
 ![Now Board Edit mode](docs/edit.png)
 
+Now Board **1.1** adds a daily focus target, a system/12-hour/24-hour clock
+setting, a customizable board name, native timer and return-time notifications,
+global quick capture, sleep-aware wake times, and faster keyboard quick modes.
+
+Break, away, and sleeping statuses replace the work board with a quiet scene
+built for the same distance. Objectives, tasks, progress, notes, and the work
+timeline are not rendered in Present or published to the LAN view.
+
+| On a break | Away | Sleeping |
+| --- | --- | --- |
+| ![Break scene](docs/present-break.png) | ![Away scene](docs/present-away.png) | ![Sleeping scene](docs/present-sleep.png) |
+
 ## What it does
 
 ### Present mode
 
 - One large current status with an elapsed timer and optional subline.
-- A live clock, focus timer, session streak, and daily rhythm timeline.
+- Dedicated break, away, and sleeping scenes with a calm prompt, return
+  countdown, or dim clock.
+- A live clock, focus timer, session streak, daily rhythm timeline, and a daily
+  focus goal with progress while in a focus status.
+- The clock follows the system or can be forced to 12-hour or 24-hour time.
 - The current focus task, up-next work, task progress, goals, milestones, and a
-  private-or-public note.
+  private-or-public note while in a focus status.
+- Status-aware return and wake times: short break options, longer away options,
+  6/7/8/9-hour sleep options, and a custom clock time. The return time appears in
+  Edit, Present, the LAN view, and the tray tooltip; passing it does not silently
+  change the status.
+- Optional native notifications when a focus/break timer ends or a return/wake
+  time arrives. They contain no task, goal, or note text and stay on the
+  machine.
 - Stable geometry tuned for 1080p, 4K, narrow displays, and video compression.
 - Optional per-section visibility, fullscreen, cursor hiding, and always-on-top.
 - Every task, goal, and note can be marked private. Private items never reach
@@ -28,7 +51,17 @@ is required.
 
 ### Edit mode
 
-- Status presets on `1`–`9`, or a custom label, emoji, color, and kind.
+- Status presets on `1`–`9`, including **On a break**, **Away**, and **Sleeping**,
+  or a custom label, emoji, color, and kind.
+- A status-aware return/wake menu with quick options and a custom clock time,
+  plus break, away, sleeping, and focus quick modes from the command palette,
+  tray, and local keyboard.
+- A daily focus goal with progress in Today and Present; choose Off or 30-minute
+  increments up to eight hours in Settings.
+- Focus and break timer duration presets (25/50/90 minutes for focus,
+  5/15/30 for breaks); choosing a new duration re-arms the timer.
+- A completion toast that offers the natural next step: **Take 5** after focus,
+  or **Start focus** after a break.
 - Automatic status-session history and a compact daily timeline.
 - Multiple task lists, drag reordering, priorities, a pinned **Now** task,
   quick add, inline rename, and per-task privacy.
@@ -38,9 +71,13 @@ is required.
   states, and focused dialogs.
 - Dark and light themes, eight accent palettes plus a status-derived accent,
   gradient or solid backgrounds, ambient motion, reduced motion, comfortable or
-  compact density, and 85–130% text scaling.
-- Focus timer keys (`f` to start/pause, `Shift+F` to reset), an optional tray
-  icon, close-to-tray behavior, and a one-click desktop shortcut creator.
+  compact density, 85–130% text scaling, a custom board name, and a clock format.
+- Focus timer keys (`f` to start/pause, `Shift+F` to reset), local quick modes
+  (`b` break, `a` away, `s` sleeping, `r` return to focus), an optional tray icon
+  with live status, close-to-tray behavior, and a one-click desktop shortcut
+  creator.
+- Global quick capture (`Ctrl+Alt+N`) and a tray **Capture a task…** item bring
+  the cursor straight to quick add. The tray can also pause or resume the timer.
 - Atomic saves, daily backups, JSON import/export, archived reset, and backup
   restore. The data folder is revealed from Settings, never from Present.
 
@@ -74,9 +111,11 @@ npm run shortcut
 
 The shortcut points at the current `release\Now Board-win32-x64\Now Board.exe`.
 If you move the portable folder, recreate the shortcut. Now Board runs a tray
-icon while it is open; its menu can open the board, toggle Present, show Panic,
-or quit. Enable **Close to tray** to keep the app available when the window is
-closed.
+icon while it is open; its menu can open the board, capture a task, pause or
+resume the timer, toggle Present, show Panic, start a focus session, take a
+break, step away, enter Sleeping, or quit. The tray tooltip follows the current
+status and return/wake time. Enable **Close to tray** to keep the app available
+when the window is closed.
 
 ### Development
 
@@ -103,6 +142,7 @@ npm start
 | `Ctrl+Shift+P` | Toggle Present / Edit |
 | `Ctrl+Shift+B` | Toggle Panic screen |
 | `Ctrl+Alt+O` | Open / focus the running board |
+| `Ctrl+Alt+N` | Quick capture a task (opens Edit with quick add focused) |
 
 Windows may reserve one of these for another app. Settings reports any failed
 registration; the same actions remain available in-app. The global Open
@@ -113,11 +153,15 @@ shortcut cover the closed-app case.
 
 | Shortcut | Action |
 | --- | --- |
-| `1`–`9` | Apply a status preset (Edit mode) |
+| `1`–`9` | Apply a status preset, including break, away, and sleeping (Edit mode) |
 | `n` | Focus quick add (Edit mode) |
+| `b` | Take a 5-minute break (Edit mode) |
+| `a` | Step away for 30 minutes (Edit mode) |
+| `s` | Enter Sleeping (Edit mode) |
+| `r` | Return to a 25-minute focus session (Edit mode) |
 | `f` | Start or pause the focus timer (Edit mode) |
 | `Shift+F` | Reset the focus timer (Edit mode) |
-| `Ctrl+K` | Command palette |
+| `Ctrl+K` | Command palette; includes break, away, sleeping, and focus quick modes |
 | `Ctrl+,` | Settings |
 | `Ctrl+Shift+P` | Toggle Present |
 | `Ctrl+Shift+B` | Panic |
@@ -142,8 +186,20 @@ redirect to `/share`; malformed URLs return `400`; writes return `405`; response
 use a strict CSP, `noindex`, `nosniff`, and `no-store`.
 
 Private tasks, private goals, and private notes are removed before the snapshot
-is published. The status **subline is intentionally public**; do not put
-sensitive text there while sharing or screen sharing.
+is published. Break, away, and sleeping statuses publish a quiet scene instead of
+the work board: goals, tasks, task stats, notes, timeline history, streak, and
+daily focus progress are removed or zeroed in the snapshot and never rendered in
+Present/LAN view. The status
+**subline is intentionally public**; do not put sensitive text there while
+sharing or screen sharing.
+
+Return and wake times are also part of the snapshot so every display shows the
+same cue. They are display metadata only; Now Board does not switch status or
+start a timer automatically when the time passes.
+
+Desktop notifications are generated by the Electron main process and stay on the
+machine. They never include task, goal, note, or status-subline text. The quick
+capture global shortcut brings the app forward but does not transmit anything.
 
 The LAN view has no login and no TLS. Enable it only on a trusted private
 network. Windows Firewall may ask for permission the first time. Panic hides the
@@ -152,8 +208,11 @@ finished.
 
 ## Data, backups, and recovery
 
-The live board is one versioned JSON document (`STATE_VERSION = 1`) stored in
+The live board is one versioned JSON document (`STATE_VERSION = 3`) stored in
 Electron's `userData` folder. Settings shows the exact location under **Data**.
+Version 3 adds the board name, clock format, daily focus target, and notification
+preference. Version 2 added the sleeping status kind and return times; older
+boards normalize missing fields and keep working.
 
 - Saves are debounced and written atomically through a temporary file and
   rename, so a crash cannot leave a half-written `board.json`.
@@ -206,12 +265,12 @@ See [DECISIONS.md](DECISIONS.md) for the reasoning behind the larger choices and
 | `npm run lint` | ESLint |
 | `npm test` | Vitest unit and route tests |
 | `npm run verify` | Typecheck, lint, tests, build |
-| `npm run screenshots` | Playwright Electron captures at three sizes |
-| `npm run screenshots:variants` | Light, compact, 130%, palette, focus, motion, fullscreen checks |
+| `npm run screenshots` | Playwright Electron captures of Edit, Present, and quiet scenes at three sizes |
+| `npm run screenshots:variants` | Light, compact, 130%, palette, focus, quiet-privacy, motion, fullscreen checks |
 | `npm run icon` | Regenerate `build/icon.png` and `.ico` |
 | `npm run package` | Build and produce `release/Now Board-win32-x64/` |
 | `npm run shortcut` | Create a desktop shortcut to the packaged app |
-| `npm run verify:share` | End-to-end LAN share, privacy, routing, and CSP check |
+| `npm run verify:share` | End-to-end LAN share, quiet-mode scrubbing, privacy, routing, and CSP check |
 | `npm run verify:packaged` | Launch the packaged app, check save, shortcut, tray, screenshot |
 
 The screenshot and verification scripts drive a real Electron window with
@@ -224,7 +283,11 @@ current `dist/`.
 - Windows x64 portable build only; no native installer, signing, or auto-update.
 - Single machine, single instance. No cloud sync, accounts, or mobile app.
 - LAN share is read-only, unauthenticated, and plain HTTP on a trusted LAN.
-- Present privacy is item-level. The status subline is public by design.
+- Present privacy is item-level. The status subline is public by design. Quiet
+  statuses hide goals, tasks, stats, notes, and work panels, but the status label,
+  subline, and return time remain public.
+- Return times are cues only. They do not auto-change status, auto-start a timer,
+  or send a notification when they pass.
 - The newest 20 daily backups are kept; archives are kept indefinitely.
 - Global Open works only while the app is running. The desktop shortcut starts
   it from cold, but points at the current release folder.

@@ -3,9 +3,10 @@ import { useBoard } from './hooks/useBoard';
 import { isTypingTarget } from './hooks/useUi';
 import { getBridge } from './lib/bridge';
 import { createHotkeyGate, isAppHotkeyAction, type AppHotkeyAction } from './lib/hotkeys';
-import type { BoardState } from './state/types';
+import type { BoardState, StatusKind } from './state/types';
 import { ACCENT_PALETTES } from './state/defaults';
 import { buildPresentViewModel, focusRemainingSeconds } from './state/selectors';
+import { formatClockLabel } from './state/time';
 import { exportBoard, importBoardFile } from './state/storage';
 import { normalizeBoard } from './state/normalize';
 import { AmbientBackground } from './components/AmbientBackground';
@@ -74,6 +75,7 @@ function BoardApp() {
   const modeRef = useRef<Mode>(mode);
   const stateRef = useRef<BoardState | null>(board.state);
   const completingFocusRef = useRef(false);
+  const notifiedReturnRef = useRef<number | null>(null);
   const lastSaveErrorRef = useRef<string | null>(null);
   const hotkeyGateRef = useRef(createHotkeyGate());
   modeRef.current = mode;
@@ -113,8 +115,9 @@ function BoardApp() {
   }, [settings, state?.current.color, mode, panic]);
 
   useEffect(() => {
-    document.title = mode === 'present' ? 'Now Board — Present' : 'Now Board';
-  }, [mode]);
+    const boardName = state?.settings.boardName ?? 'Now Board';
+    document.title = mode === 'present' ? `${boardName} — Present` : boardName;
+  }, [mode, state?.settings.boardName]);
 
   useEffect(() => {
     const bridge = getBridge();
@@ -173,13 +176,78 @@ function BoardApp() {
     else showPresent();
   }, [showEdit, showPresent]);
 
+  const activateMode = useCallback(
+    (kind: StatusKind, minutes?: number, options?: { present?: boolean }) => {
+      const current = stateRef.current;
+      if (!current) return;
+      const preset = current.presets.find((entry) => entry.kind === kind);
+      if (!preset) return;
+
+      board.dispatch({
+        type: 'status/set',
+        preset,
+        returnInMinutes: kind === 'focus' ? null : (minutes ?? null),
+      });
+
+      if (kind === 'break') {
+        board.dispatch({
+          type: 'focus/start',
+          mode: 'break',
+          durationSec: (minutes ?? 5) * 60,
+        });
+      } else if (kind === 'focus') {
+        board.dispatch({
+          type: 'focus/start',
+          mode: 'focus',
+          durationSec: (minutes ?? 25) * 60,
+        });
+      } else if (current.focus.running) {
+        board.dispatch({ type: 'focus/pause' });
+      }
+
+      if (kind !== 'focus' && minutes) {
+        notify(
+          `${preset.label} · back at ${formatClockLabel(
+            Date.now() + minutes * 60_000,
+            current.settings.clockFormat,
+          )}`,
+          { duration: 2600 },
+        );
+      } else {
+        notify(`Status · ${preset.label}`, { duration: 1800 });
+      }
+      if (options?.present !== false) showPresent();
+    },
+    [board.dispatch, notify, showPresent],
+  );
+
+  const quickCapture = useCallback(() => {
+    showEdit();
+    setPaletteOpen(false);
+    setSettingsOpen(false);
+    setGoalEditor({ open: false, goalId: null });
+    window.setTimeout(() => quickAddRef.current?.focus(), 40);
+  }, [showEdit]);
+
   const runHotkey = useCallback(
     (action: AppHotkeyAction) => {
       if (!hotkeyGateRef.current.accept(action)) return;
       if (action === 'toggle-present') togglePresent();
-      else setPanic((value) => !value);
+      else if (action === 'toggle-panic') setPanic((value) => !value);
+      else if (action === 'quick-add') quickCapture();
+      else if (action === 'timer-toggle') {
+        const current = stateRef.current;
+        if (current) {
+          board.dispatch(
+            current.focus.running ? { type: 'focus/pause' } : { type: 'focus/start' },
+          );
+        }
+      } else if (action === 'mode-focus') activateMode('focus', 25);
+      else if (action === 'mode-break') activateMode('break', 15);
+      else if (action === 'mode-away') activateMode('away', 30);
+      else activateMode('sleep');
     },
-    [togglePresent],
+    [activateMode, quickCapture, togglePresent],
   );
 
   const openPalette = useCallback(() => {
@@ -290,12 +358,22 @@ function BoardApp() {
             current.focus.running ? { type: 'focus/pause' } : { type: 'focus/start' },
           );
         }
+        return;
+      }
+
+      if (!event.shiftKey && !event.repeat && ['b', 'a', 's', 'r'].includes(key)) {
+        event.preventDefault();
+        if (key === 'b') activateMode('break', 5, { present: false });
+        else if (key === 'a') activateMode('away', 30, { present: false });
+        else if (key === 's') activateMode('sleep', undefined, { present: false });
+        else activateMode('focus', 25, { present: false });
       }
     };
 
     window.addEventListener('keydown', handle);
     return () => window.removeEventListener('keydown', handle);
   }, [
+    activateMode,
     board.dispatch,
     goalEditor.open,
     openPalette,
@@ -335,21 +413,64 @@ function BoardApp() {
       completingFocusRef.current = true;
       const wasBreak = current.focus.mode === 'break';
       board.dispatch({ type: 'focus/complete' });
+      if (current.settings.notifyOnTimer) {
+        getBridge()?.notify({
+          title: wasBreak ? 'Break complete' : 'Focus complete',
+          body: wasBreak
+            ? 'Ready for another focus session when you are.'
+            : 'Take a breath, then choose what comes next.',
+        });
+      }
       notify(wasBreak ? 'Break over. Ready when you are.' : 'Focus session complete. Take a breath.', {
         tone: 'success',
-        duration: 5200,
+        duration: 6000,
+        action: wasBreak
+          ? { label: 'Start focus', onClick: () => activateMode('focus', 25, { present: false }) }
+          : { label: 'Take 5', onClick: () => activateMode('break', 5, { present: false }) },
       });
     };
     tick();
     const timer = setInterval(tick, 1000);
     return () => clearInterval(timer);
   }, [
+    activateMode,
     board.dispatch,
     notify,
     state?.focus.mode,
     state?.focus.running,
     state?.focus.startedAt,
   ]);
+
+  useEffect(() => {
+    const returnAt = state?.current.returnAt ?? null;
+    if (returnAt === null) {
+      notifiedReturnRef.current = null;
+      return;
+    }
+    // A return time that was already in the past on load is stale; only notify
+    // when this session visibly crosses the target while the app is running.
+    if (returnAt <= Date.now()) {
+      notifiedReturnRef.current = returnAt;
+      return;
+    }
+    const check = () => {
+      const current = stateRef.current;
+      if (!current || current.current.returnAt !== returnAt) return;
+      if (Date.now() < returnAt || notifiedReturnRef.current === returnAt) return;
+      notifiedReturnRef.current = returnAt;
+      if (!current.settings.notifyOnTimer) return;
+      const sleeping = current.current.kind === 'sleep';
+      getBridge()?.notify({
+        title: sleeping ? 'Wake time' : 'Return time',
+        body: sleeping
+          ? 'Your wake time has arrived. Rise gently.'
+          : 'You planned to be back at the board around now.',
+      });
+    };
+    check();
+    const timer = setInterval(check, 5_000);
+    return () => clearInterval(timer);
+  }, [state?.current.kind, state?.current.returnAt]);
 
   // -------------------------------------------------------------------- data
 
@@ -485,6 +606,50 @@ function BoardApp() {
         action: () => setPanic(true),
       },
       {
+        id: 'break-5',
+        label: 'Take a 5-minute break',
+        group: 'Quick modes',
+        hint: '5m',
+        keywords: 'break away pause rest coffee quiet',
+        icon: 'coffee',
+        action: () => activateMode('break', 5),
+      },
+      {
+        id: 'break-15',
+        label: 'Take a 15-minute break',
+        group: 'Quick modes',
+        hint: '15m',
+        keywords: 'break away pause rest coffee quiet',
+        icon: 'coffee',
+        action: () => activateMode('break', 15),
+      },
+      {
+        id: 'away-30',
+        label: 'Step away for 30 minutes',
+        group: 'Quick modes',
+        hint: '30m',
+        keywords: 'away out lunch errand back return',
+        icon: 'moon',
+        action: () => activateMode('away', 30),
+      },
+      {
+        id: 'sleep',
+        label: 'Sleeping mode',
+        group: 'Quick modes',
+        keywords: 'sleep night rest quiet dim away',
+        icon: 'moon',
+        action: () => activateMode('sleep'),
+      },
+      {
+        id: 'focus-session',
+        label: 'Start a 25-minute focus session',
+        group: 'Quick modes',
+        hint: '25m',
+        keywords: 'focus work pomodoro back return',
+        icon: 'play',
+        action: () => activateMode('focus', 25),
+      },
+      {
         id: 'new-task',
         label: 'New task',
         group: 'Create',
@@ -554,6 +719,7 @@ function BoardApp() {
 
     return items;
   }, [
+    activateMode,
     board.dispatch,
     handleExport,
     handleImport,

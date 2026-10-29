@@ -9,7 +9,12 @@ import {
 import type { BoardState, StatusKind } from '../state/types';
 import type { Action } from '../state/types';
 import { buildTimeline } from '../state/selectors';
-import { formatDuration } from '../state/time';
+import {
+  formatClockLabel,
+  formatDuration,
+  nextTimeTarget,
+  toTimeInputValue,
+} from '../state/time';
 import { cx } from '../lib/cx';
 import { useDismiss, useNow } from '../hooks/useUi';
 import { useToast } from './Toasts';
@@ -28,6 +33,24 @@ const STATUS_COLORS = [
   '#F2F4F7',
 ];
 
+const SUBLINE_LABELS: Record<StatusKind, string> = {
+  focus: 'Working on',
+  break: 'Break note',
+  away: 'Away note',
+  sleep: 'Rest note',
+};
+
+const RETURN_OPTIONS: Record<StatusKind, number[]> = {
+  focus: [15, 30, 60, 120],
+  break: [5, 10, 15, 30],
+  away: [30, 60, 120, 240],
+  sleep: [360, 420, 480, 540],
+};
+
+function returnDurationLabel(minutes: number): string {
+  return minutes % 60 === 0 ? `${minutes / 60}h` : `${minutes}m`;
+}
+
 export function StatusHero({
   state,
   dispatch,
@@ -39,15 +62,32 @@ export function StatusHero({
   const { notify } = useToast();
   const [draft, setDraft] = useState(state.current.subline);
   const [customOpen, setCustomOpen] = useState(false);
+  const [returnOpen, setReturnOpen] = useState(false);
+  const [timeDraft, setTimeDraft] = useState('');
   const sublineFocused = useRef(false);
   const customAnchor = useRef<HTMLDivElement>(null);
+  const returnAnchor = useRef<HTMLDivElement>(null);
   const session = state.sessions.find((entry) => entry.endedAt === null);
+  const returnAt = state.current.returnAt;
+  const returnPassed = returnAt !== null && returnAt <= now;
+  const clockFormat = state.settings.clockFormat;
+  const wakeMode = state.current.kind === 'sleep';
+  const returnVerb = wakeMode ? 'Wake' : 'Back';
+  const returnLabel =
+    returnAt === null
+      ? wakeMode
+        ? 'Add wake time'
+        : 'Add return time'
+      : returnPassed
+        ? `${returnVerb} time passed`
+        : `${returnVerb} at ${formatClockLabel(returnAt, clockFormat)}`;
 
   useEffect(() => {
     if (!sublineFocused.current) setDraft(state.current.subline);
   }, [state.current.subline, state.current.since]);
 
   useDismiss(customAnchor, customOpen, () => setCustomOpen(false));
+  useDismiss(returnAnchor, returnOpen, () => setReturnOpen(false));
 
   const commitSubline = () => {
     const next = draft.replace(/\s+/g, ' ').trim();
@@ -73,6 +113,39 @@ export function StatusHero({
     notify('Status timer restarted.', { duration: 2200 });
   };
 
+  const setReturn = (minutes: number | null) => {
+    dispatch({ type: 'status/returnIn', minutes });
+    setReturnOpen(false);
+    notify(
+      minutes === null
+        ? `${returnVerb} time cleared.`
+        : `${returnVerb} at ${formatClockLabel(
+            Date.now() + minutes * 60_000,
+            clockFormat,
+          )}.`,
+      { duration: 2200 },
+    );
+  };
+
+  const openReturnMenu = () => {
+    if (!returnOpen) {
+      const suggestion = new Date(Date.now() + 60 * 60_000);
+      if (wakeMode) {
+        suggestion.setHours(7, 0, 0, 0);
+        if (suggestion.getTime() <= Date.now()) suggestion.setDate(suggestion.getDate() + 1);
+      }
+      setTimeDraft(toTimeInputValue(suggestion.getTime()));
+    }
+    setReturnOpen((open) => !open);
+  };
+
+  const submitCustomReturn = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const target = nextTimeTarget(timeDraft);
+    if (target === null) return;
+    setReturn(Math.max(1, Math.ceil((target - Date.now()) / 60_000)));
+  };
+
   const timeline = buildTimeline(state.sessions, now);
 
   return (
@@ -88,6 +161,89 @@ export function StatusHero({
             For <strong>{formatDuration(Math.max(0, now - state.current.since))}</strong>
           </span>
           <IconButtonSmall label="Restart status timer" onClick={resetTimer} />
+          <div className="popover-anchor return-anchor" ref={returnAnchor}>
+            <button
+              type="button"
+              className={cx('return-chip', returnAt !== null && 'is-set', returnOpen && 'is-open')}
+              aria-expanded={returnOpen}
+              aria-haspopup="dialog"
+              aria-label={returnLabel}
+              title={returnLabel}
+              onClick={openReturnMenu}
+            >
+              <Icon name="clock-plus" size={12} />
+              <span className="return-chip__label">
+                {returnAt === null
+                  ? wakeMode
+                    ? 'Wake'
+                    : 'Return'
+                  : returnPassed
+                    ? wakeMode
+                      ? 'Wake time'
+                      : 'Any moment'
+                    : formatClockLabel(returnAt, clockFormat)}
+              </span>
+            </button>
+            {returnOpen ? (
+              <div
+                className="popover return-menu"
+                role="dialog"
+                aria-label={wakeMode ? 'Wake time' : 'Return time'}
+              >
+                <div className="return-menu__head">
+                  <span className="return-menu__title">
+                    {wakeMode ? 'Wake time' : 'Back at the board'}
+                  </span>
+                  <span className="return-menu__hint">
+                    {wakeMode ? 'A quiet cue for the morning' : 'Quick return time'}
+                  </span>
+                </div>
+                <div className="return-menu__options">
+                  {RETURN_OPTIONS[state.current.kind].map((minutes) => (
+                    <button
+                      key={minutes}
+                      type="button"
+                      className="return-menu__option"
+                      onClick={() => setReturn(minutes)}
+                    >
+                      <strong>{returnDurationLabel(minutes)}</strong>
+                      <span>
+                        {formatClockLabel(Date.now() + minutes * 60_000, clockFormat)}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+                <form
+                  className="return-menu__custom"
+                  aria-label={`Custom ${returnVerb.toLowerCase()} time`}
+                  onSubmit={submitCustomReturn}
+                >
+                  <label htmlFor="return-time">
+                    {wakeMode ? 'Wake at' : 'Back at'}
+                  </label>
+                  <input
+                    id="return-time"
+                    className="input"
+                    type="time"
+                    value={timeDraft}
+                    onChange={(event) => setTimeDraft(event.target.value)}
+                  />
+                  <button type="submit" className="btn btn--subtle btn--sm">
+                    <span className="btn__label">Set</span>
+                  </button>
+                </form>
+                <button
+                  type="button"
+                  className="return-menu__clear"
+                  disabled={returnAt === null}
+                  onClick={() => setReturn(null)}
+                >
+                  <Icon name="x" size={12} />
+                  Clear {wakeMode ? 'wake' : 'return'} time
+                </button>
+              </div>
+            ) : null}
+          </div>
         </div>
       </div>
 
@@ -104,7 +260,7 @@ export function StatusHero({
           </h1>
           <div className="status-subline">
             <label className="status-subline__label" htmlFor="status-subline">
-              Working on
+              {SUBLINE_LABELS[state.current.kind]}
             </label>
             <input
               id="status-subline"
@@ -296,6 +452,7 @@ function CustomStatusPopover({
               ['focus', 'Focus'],
               ['break', 'Break'],
               ['away', 'Away'],
+              ['sleep', 'Sleeping'],
             ] as const
           ).map(([value, text]) => (
             <button

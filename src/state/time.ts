@@ -1,3 +1,5 @@
+import type { ClockFormat } from './types';
+
 export const SECOND = 1000;
 export const MINUTE = 60 * SECOND;
 export const HOUR = 60 * MINUTE;
@@ -33,21 +35,49 @@ export function formatClock(ts: number, withSeconds = false): string {
     : `${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }
 
-export function clockParts(ts: number): { time: string; period: string } {
+export function clockParts(
+  ts: number,
+  format: ClockFormat = 'system',
+): { time: string; period: string } {
   const parts = new Intl.DateTimeFormat(undefined, {
     hour: 'numeric',
     minute: '2-digit',
+    ...(format === '12h' ? { hour12: true } : {}),
+    ...(format === '24h' ? { hour12: false } : {}),
   }).formatToParts(new Date(ts));
-  let time = '';
+  let hour = '';
+  let minute = '';
   let period = '';
   for (const part of parts) {
-    if (part.type === 'hour' || part.type === 'minute' || part.type === 'literal') {
-      if (part.type === 'literal' && part.value === ':') time += part.value;
-      else if (part.type !== 'literal') time = time.length === 0 ? part.value : `${time}:${part.value}`;
-    }
-    if (part.type === 'dayPeriod') period = part.value;
+    if (part.type === 'hour') hour = part.value;
+    else if (part.type === 'minute') minute = part.value;
+    else if (part.type === 'dayPeriod') period = part.value;
   }
-  return { time: time || formatClock(ts), period };
+  const time = hour && minute ? `${hour}:${minute}` : formatClock(ts);
+  return { time, period };
+}
+
+export function formatClockLabel(ts: number, format: ClockFormat = 'system'): string {
+  const parts = clockParts(ts, format);
+  return parts.period ? `${parts.time} ${parts.period}` : parts.time;
+}
+
+export function toTimeInputValue(ts: number): string {
+  const date = new Date(ts);
+  return `${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
+export function nextTimeTarget(time: string, now = Date.now()): number | null {
+  const match = /^(\d{1,2}):(\d{2})$/.exec(time.trim());
+  if (!match) return null;
+  const hours = Number(match[1]);
+  const minutes = Number(match[2]);
+  if (!Number.isInteger(hours) || !Number.isInteger(minutes)) return null;
+  if (hours < 0 || hours > 23 || minutes < 0 || minutes > 59) return null;
+  const target = new Date(now);
+  target.setHours(hours, minutes, 0, 0);
+  if (target.getTime() <= now + 30_000) target.setDate(target.getDate() + 1);
+  return target.getTime();
 }
 
 export function formatDate(ts: number): string {

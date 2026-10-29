@@ -40,6 +40,7 @@ export const DEFAULT_PRESETS: StatusPreset[] = [
   { id: 'streaming', label: 'Streaming', emoji: '🔴', color: '#FF93C8', kind: 'focus' },
   { id: 'break', label: 'On a break', emoji: '☕', color: '#FFCB6B', kind: 'break' },
   { id: 'away', label: 'Away', emoji: '🌙', color: '#A3AEBF', kind: 'away' },
+  { id: 'sleeping', label: 'Sleeping', emoji: '😴', color: '#8A93A6', kind: 'sleep' },
 ];
 
 export const DEFAULT_PRESENT: PresentSettings = {
@@ -64,6 +65,10 @@ export const DEFAULT_SETTINGS: Settings = {
   reduceMotion: false,
   fontScale: 1,
   density: 'comfortable',
+  boardName: 'Now Board',
+  clockFormat: 'system',
+  focusTargetMin: 240,
+  notifyOnTimer: true,
   present: DEFAULT_PRESENT,
   alwaysOnTop: false,
   launchAtLogin: false,
@@ -182,6 +187,7 @@ export function createInitialState(now = Date.now()): BoardState {
       kind: current.kind,
       since: now,
       subline: 'Now Board',
+      returnAt: null,
     },
     presets: DEFAULT_PRESETS.map((preset) => ({ ...preset })),
     sessions: [

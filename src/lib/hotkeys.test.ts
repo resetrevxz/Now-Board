@@ -29,6 +29,11 @@ describe('createHotkeyGate', () => {
   it('recognises only the app hotkey actions', () => {
     expect(isAppHotkeyAction('toggle-present')).toBe(true);
     expect(isAppHotkeyAction('toggle-panic')).toBe(true);
+    expect(isAppHotkeyAction('quick-add')).toBe(true);
+    expect(isAppHotkeyAction('timer-toggle')).toBe(true);
+    expect(isAppHotkeyAction('mode-break')).toBe(true);
+    expect(isAppHotkeyAction('mode-away')).toBe(true);
+    expect(isAppHotkeyAction('mode-sleep')).toBe(true);
     expect(isAppHotkeyAction('toggle-settings')).toBe(false);
     expect(isAppHotkeyAction('')).toBe(false);
   });

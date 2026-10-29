@@ -49,7 +49,7 @@ function timestamp(value: unknown, fallback: number): number {
 }
 
 function isStatusKind(value: unknown): value is StatusKind {
-  return value === 'focus' || value === 'break' || value === 'away';
+  return value === 'focus' || value === 'break' || value === 'away' || value === 'sleep';
 }
 
 function isPriority(value: unknown): value is Priority {
@@ -200,6 +200,7 @@ function normalizeCurrent(
     emoji: base.emoji,
     color: base.color,
     kind: base.kind,
+    returnAt: null,
   };
   if (!isRecord(raw)) {
     const open = sessions.find((session) => session.endedAt === null);
@@ -212,6 +213,7 @@ function normalizeCurrent(
           kind: open.kind,
           since: open.startedAt,
           subline: '',
+          returnAt: null,
         }
       : fallbackStatus;
   }
@@ -224,6 +226,7 @@ function normalizeCurrent(
   const emoji = cleanLine(raw.emoji, 8, '') || fallbackStatus.emoji;
   const color = isHexColor(raw.color) ? raw.color : fallbackStatus.color;
   const kind = isStatusKind(raw.kind) ? raw.kind : fallbackStatus.kind;
+  const returnAtRaw = finiteNumber(raw.returnAt, 0);
   return {
     presetId,
     label,
@@ -232,6 +235,7 @@ function normalizeCurrent(
     kind,
     since: timestamp(raw.since, now),
     subline: cleanLine(raw.subline, 120, ''),
+    returnAt: returnAtRaw > 0 ? returnAtRaw : null,
   };
 }
 
@@ -354,6 +358,11 @@ function normalizeSettings(raw: unknown): Settings {
       typeof raw.reduceMotion === 'boolean' ? raw.reduceMotion : base.reduceMotion,
     fontScale: clampNumber(raw.fontScale, 0.85, 1.3, base.fontScale),
     density: oneOf(raw.density, ['comfortable', 'compact'] as const, base.density),
+    boardName: cleanLine(raw.boardName, 40, base.boardName),
+    clockFormat: oneOf(raw.clockFormat, ['system', '12h', '24h'] as const, base.clockFormat),
+    focusTargetMin: Math.round(clampNumber(raw.focusTargetMin, 0, 8 * 60, base.focusTargetMin)),
+    notifyOnTimer:
+      typeof raw.notifyOnTimer === 'boolean' ? raw.notifyOnTimer : base.notifyOnTimer,
     present,
     alwaysOnTop:
       typeof raw.alwaysOnTop === 'boolean' ? raw.alwaysOnTop : base.alwaysOnTop,

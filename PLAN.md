@@ -45,9 +45,12 @@ screenshare face; edit mode is the fast, keyboard-first control surface.
 - [x] **M8 — Ship.** Portable Windows build, README, decision log, final
       verification and summary. A native installer was deliberately deferred;
       the released artifact is the portable folder.
-- [x] **M9 — Launch & tray.** Desktop shortcut creator in Settings and
+- [x] **M9 - Launch & tray.** Desktop shortcut creator in Settings and
       `npm run shortcut`, tray menu, opt-in close-to-tray, global Open shortcut,
       and focus timer keys.
+- [x] **M10 - 1.1 rhythm.** Clock format fix, daily focus target, custom board
+      name, native timer/return notifications, sleep-aware custom wake times,
+      global quick capture, tray capture/pause, and local quick modes.
 
 ## Verification gates (every milestone)
 
@@ -68,6 +71,14 @@ of both modes at 1920×1080, 1280×800 and 860×1000, reviewed critically.
       preload bridge, task save to `board.json`, desktop shortcut creation,
       global Open registration, close-to-tray, and packaged screenshot.
 - [x] `npm run shortcut` — desktop shortcut created for the packaged release.
+
+## 1.1 gate
+
+- [x] `npm run verify` — typecheck, lint, 48 tests in 7 files, production build.
+- [x] Screenshots at 1920x1080, 1280x800, and 860x1000, plus the 1.1 variant,
+      return-menu, quiet-scene, and share checks.
+- [x] Packaged 1.1 build, packaged smoke checks, desktop shortcut refresh, and
+      commit.
 
 ## Non-goals
 

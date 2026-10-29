@@ -129,6 +129,65 @@ try {
     animations: 'disabled',
   });
   console.log('  ✓ screenshots/share-1280x800.png');
+
+  // Quiet modes must scrub work content before it reaches the LAN client.
+  await page.keyboard.press('6');
+  await page.waitForTimeout(250);
+  await page.getByRole('button', { name: 'Add return time' }).click();
+  await page
+    .getByRole('dialog', { name: 'Return time' })
+    .getByRole('button', { name: /^15m/ })
+    .click();
+  await page.waitForTimeout(600);
+
+  let quietSnapshot = null;
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    const response = await fetch(`${base}/api/state`);
+    const candidate = await response.json();
+    if (candidate?.status?.kind === 'break') {
+      quietSnapshot = candidate;
+      break;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 150));
+  }
+  check(Boolean(quietSnapshot), 'quiet-mode snapshot is published');
+  const quietSerialized = JSON.stringify(quietSnapshot);
+  check(quietSnapshot?.status?.kind === 'break', 'snapshot carries the break scene kind');
+  check(Number(quietSnapshot?.status?.returnAt) > Date.now(), 'snapshot carries the return time');
+  check(
+    quietSnapshot?.goals?.length === 0 &&
+      quietSnapshot?.upNext?.length === 0 &&
+      quietSnapshot?.nowTask === null &&
+      quietSnapshot?.note === null &&
+      quietSnapshot?.timeline?.focusMs === 0 &&
+      quietSnapshot?.streakDays === 0 &&
+      quietSnapshot?.settings?.focusTargetMin === 0,
+    'quiet snapshot contains no objectives or work progress',
+  );
+  check(
+    !quietSerialized.includes('Ship Now Board v1') &&
+      !quietSerialized.includes('Write the README'),
+    'quiet snapshot omits public goal and task text',
+  );
+
+  await shareWindow.reload();
+  await shareWindow.waitForSelector('.present--break', { timeout: 15_000 });
+  await shareWindow.waitForTimeout(400);
+  const quietText = await shareWindow.locator('body').innerText();
+  check(quietText.includes('On a break'), 'share DOM shows the break scene');
+  check(!quietText.includes('Write the README'), 'share DOM hides work during a break');
+  check(
+    (await shareWindow
+      .locator('.present-goal, .present-tasks, .present-note, .present-timeline')
+      .count()) === 0,
+    'share DOM has no objectives or work panels during a break',
+  );
+  await shareWindow.locator('body').screenshot({
+    path: 'screenshots/share-break-1280x800.png',
+    animations: 'disabled',
+  });
+  console.log('  ✓ screenshots/share-break-1280x800.png');
+  await page.keyboard.press('1');
 } finally {
   await shareWindow?.close().catch(() => undefined);
   await launched?.close().catch(() => undefined);

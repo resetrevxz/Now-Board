@@ -90,6 +90,52 @@ describe('status sessions', () => {
   });
 });
 
+describe('quiet modes and return times', () => {
+  it('sets a return time and clears it when leaving the mode', () => {
+    const state = fresh();
+    const breakPreset = state.presets.find((preset) => preset.kind === 'break');
+    const sleepPreset = state.presets.find((preset) => preset.kind === 'sleep');
+    if (!breakPreset || !sleepPreset) throw new Error('Missing quiet presets');
+
+    const onBreak = reducer(state, {
+      type: 'status/set',
+      preset: breakPreset,
+      returnInMinutes: 15,
+      at: NOW,
+    });
+    expect(onBreak.current.kind).toBe('break');
+    expect(onBreak.current.returnAt).toBe(NOW + 15 * 60_000);
+
+    const cleared = reducer(onBreak, { type: 'status/returnIn', minutes: null, at: NOW + 1000 });
+    expect(cleared.current.returnAt).toBeNull();
+
+    const sleeping = reducer(onBreak, {
+      type: 'status/set',
+      preset: sleepPreset,
+      at: NOW + 2000,
+    });
+    expect(sleeping.current.kind).toBe('sleep');
+    expect(sleeping.current.label).toBe('Sleeping');
+    expect(sleeping.current.returnAt).toBeNull();
+  });
+
+  it('keeps a return time when the active status is re-applied', () => {
+    const state = fresh();
+    const awayPreset = state.presets.find((preset) => preset.kind === 'away');
+    if (!awayPreset) throw new Error('Missing away preset');
+
+    const away = reducer(state, {
+      type: 'status/set',
+      preset: awayPreset,
+      returnInMinutes: 30,
+      at: NOW,
+    });
+    const reapplied = reducer(away, { type: 'status/set', preset: awayPreset, at: NOW + 1000 });
+
+    expect(reapplied.current.returnAt).toBe(NOW + 30 * 60_000);
+  });
+});
+
 describe('task reducer', () => {
   it('adds tasks at the top and keeps a single Now task', () => {
     const state = fresh();
@@ -172,10 +218,21 @@ describe('goals and settings', () => {
     const state = fresh();
     const next = reducer(state, {
       type: 'settings/update',
-      patch: { fontScale: 9, lanShare: { enabled: true, port: 12 } },
+      patch: {
+        fontScale: 9,
+        boardName: '   Studio   ',
+        clockFormat: '24h',
+        focusTargetMin: 900,
+        notifyOnTimer: false,
+        lanShare: { enabled: true, port: 12 },
+      },
     });
 
     expect(next.settings.fontScale).toBe(1.3);
+    expect(next.settings.boardName).toBe('Studio');
+    expect(next.settings.clockFormat).toBe('24h');
+    expect(next.settings.focusTargetMin).toBe(480);
+    expect(next.settings.notifyOnTimer).toBe(false);
     expect(next.settings.lanShare.enabled).toBe(true);
     expect(next.settings.lanShare.port).toBe(1024);
     expect(next.settings.present).toEqual(state.settings.present);

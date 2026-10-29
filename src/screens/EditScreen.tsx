@@ -52,6 +52,7 @@ export function EditScreen({
         saveError={saveError}
         lastSavedAt={lastSavedAt}
         maximized={maximized}
+        boardName={state.settings.boardName}
         onPresent={onPresent}
         onOpenPalette={onOpenPalette}
         onOpenSettings={onOpenSettings}

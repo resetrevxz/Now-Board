@@ -47,7 +47,13 @@ try {
   const page = await launched.firstWindow({ timeout: 60_000 });
   await page.waitForSelector('.edit-shell', { timeout: 30_000 });
   console.log('title:', await page.title());
-  console.log('bridge:', await page.evaluate(() => Boolean(window.nowboard)));
+  const bridgeInfo = await page.evaluate(() => ({
+    present: Boolean(window.nowboard),
+    notify: typeof window.nowboard?.notify === 'function',
+  }));
+  console.log('bridge:', JSON.stringify(bridgeInfo));
+  check(bridgeInfo.present, 'preload bridge is present');
+  check(bridgeInfo.notify, 'native notification bridge is exposed');
 
   await page.keyboard.press('n');
   await page.locator('.quick-add input').fill('Packaged smoke task');
@@ -57,6 +63,13 @@ try {
   check(
     saved.tasks.some((task) => task.title === 'Packaged smoke task'),
     'packaged app saves a task locally',
+  );
+  check(saved.version === 3, 'packaged app writes state version 3');
+  check(
+    typeof saved.settings?.boardName === 'string' &&
+      typeof saved.settings?.clockFormat === 'string' &&
+      Number.isFinite(saved.settings?.focusTargetMin),
+    'packaged app writes the 1.1 settings',
   );
 
   const shortcut = await page.evaluate(() => window.nowboard.createDesktopShortcut());
@@ -88,9 +101,11 @@ try {
     present: globalShortcut.isRegistered('CommandOrControl+Shift+P'),
     panic: globalShortcut.isRegistered('CommandOrControl+Shift+B'),
     open: globalShortcut.isRegistered('CommandOrControl+Alt+O'),
+    quickCapture: globalShortcut.isRegistered('CommandOrControl+Alt+N'),
   }));
   console.log('global shortcuts:', JSON.stringify(globalShortcuts));
   check(globalShortcuts.open, 'global Open shortcut is registered');
+  check(globalShortcuts.quickCapture, 'global Quick capture shortcut is registered');
 
   await launched.evaluate(({ BrowserWindow }) => {
     BrowserWindow.getAllWindows()[0].setContentSize(1280, 800);

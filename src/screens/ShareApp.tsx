@@ -60,6 +60,10 @@ export function ShareApp() {
     };
   }, [attempts]);
 
+  useEffect(() => {
+    if (view) document.title = `${view.settings.boardName} — Live`;
+  }, [view]);
+
   if (view) return <PresentScreen view={view} share />;
 
   return (

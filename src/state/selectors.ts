@@ -159,32 +159,39 @@ export function buildPresentViewModel(
   state: BoardState,
   now = Date.now(),
 ): PresentViewModel {
-  const publicNow = state.tasks.find(
-    (task) => task.isNow && !task.done && !task.isPrivate,
-  );
-  const upNextTasks = state.tasks
-    .filter((task) => !task.done && !task.isPrivate && task.id !== publicNow?.id)
-    .slice()
-    .sort((a, b) => {
-      const priority = PRIORITY_RANK[a.priority] - PRIORITY_RANK[b.priority];
-      if (priority !== 0) return priority;
-      return a.createdAt - b.createdAt;
-    });
+  const quiet = state.current.kind !== 'focus';
+  const publicNow = quiet
+    ? undefined
+    : state.tasks.find((task) => task.isNow && !task.done && !task.isPrivate);
+  const upNextTasks = quiet
+    ? []
+    : state.tasks
+        .filter((task) => !task.done && !task.isPrivate && task.id !== publicNow?.id)
+        .slice()
+        .sort((a, b) => {
+          const priority = PRIORITY_RANK[a.priority] - PRIORITY_RANK[b.priority];
+          if (priority !== 0) return priority;
+          return a.createdAt - b.createdAt;
+        });
 
-  const publicGoals: PresentGoal[] = state.goals
-    .filter((goal) => !goal.isPrivate)
-    .map((goal) => ({
-      id: goal.id,
-      title: goal.title,
-      description: goal.description,
-      progress: Math.round(goal.progress),
-      targetDate: goal.targetDate,
-      completedMilestones: completedMilestones(goal),
-      totalMilestones: goal.milestones.length,
-    }));
+  const publicGoals: PresentGoal[] = quiet
+    ? []
+    : state.goals
+        .filter((goal) => !goal.isPrivate)
+        .map((goal) => ({
+          id: goal.id,
+          title: goal.title,
+          description: goal.description,
+          progress: Math.round(goal.progress),
+          targetDate: goal.targetDate,
+          completedMilestones: completedMilestones(goal),
+          totalMilestones: goal.milestones.length,
+        }));
 
-  const timeline = buildTimeline(state.sessions, now);
-  const streakDays = computeStreak(state.sessions, now);
+  const timeline = quiet
+    ? { segments: [], totals: [], totalTrackedMs: 0, focusMs: 0 }
+    : buildTimeline(state.sessions, now);
+  const streakDays = quiet ? 0 : computeStreak(state.sessions, now);
   const settings = state.settings;
 
   return {
@@ -196,12 +203,13 @@ export function buildPresentViewModel(
       since: state.current.since,
       subline: state.current.subline,
       kind: state.current.kind,
+      returnAt: state.current.returnAt,
     },
     nowTask: publicNow ? toPresentTask(state, publicNow) : null,
     upNext: upNextTasks.map((task) => toPresentTask(state, task)),
-    taskStats: publicTaskStats(state),
+    taskStats: quiet ? { done: 0, total: 0 } : publicTaskStats(state),
     goals: publicGoals,
-    note: state.notesPrivate ? null : state.notes.trim() ? state.notes.trim() : null,
+    note: quiet || state.notesPrivate ? null : state.notes.trim() ? state.notes.trim() : null,
     timeline,
     streakDays,
     focus: {
@@ -219,6 +227,9 @@ export function buildPresentViewModel(
       ambientMotion: settings.ambientMotion,
       reduceMotion: settings.reduceMotion,
       density: settings.density,
+      boardName: settings.boardName,
+      clockFormat: settings.clockFormat,
+      focusTargetMin: quiet ? 0 : settings.focusTargetMin,
       showGoals: settings.present.showGoals,
       showTasks: settings.present.showTasks,
       showNotes: settings.present.showNotes,

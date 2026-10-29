@@ -1,6 +1,7 @@
-export const STATE_VERSION = 1;
+export const STATE_VERSION = 3;
 
 export type ThemeMode = 'dark' | 'light';
+export type ClockFormat = 'system' | '12h' | '24h';
 export type AccentMode =
   | 'status'
   | 'moss'
@@ -14,7 +15,7 @@ export type AccentMode =
 export type BackgroundStyle = 'gradient' | 'solid';
 export type Density = 'comfortable' | 'compact';
 export type Priority = 'low' | 'medium' | 'high';
-export type StatusKind = 'focus' | 'break' | 'away';
+export type StatusKind = 'focus' | 'break' | 'away' | 'sleep';
 export type FocusMode = 'focus' | 'break';
 
 export interface StatusPreset {
@@ -33,6 +34,7 @@ export interface CurrentStatus {
   kind: StatusKind;
   since: number;
   subline: string;
+  returnAt: number | null;
 }
 
 export interface Session {
@@ -107,6 +109,10 @@ export interface Settings {
   reduceMotion: boolean;
   fontScale: number;
   density: Density;
+  boardName: string;
+  clockFormat: ClockFormat;
+  focusTargetMin: number;
+  notifyOnTimer: boolean;
   present: PresentSettings;
   alwaysOnTop: boolean;
   launchAtLogin: boolean;
@@ -212,6 +218,7 @@ export interface PresentViewModel {
     since: number;
     subline: string;
     kind: StatusKind;
+    returnAt: number | null;
   };
   nowTask: PresentTask | null;
   upNext: PresentTask[];
@@ -235,6 +242,9 @@ export interface PresentViewModel {
     ambientMotion: boolean;
     reduceMotion: boolean;
     density: Density;
+    boardName: string;
+    clockFormat: ClockFormat;
+    focusTargetMin: number;
     showGoals: boolean;
     showTasks: boolean;
     showNotes: boolean;
@@ -254,6 +264,7 @@ export type Action =
       type: 'status/set';
       preset: StatusPreset;
       subline?: string;
+      returnInMinutes?: number | null;
       at?: number;
     }
   | {
@@ -263,9 +274,11 @@ export type Action =
       color: string;
       kind: StatusKind;
       subline?: string;
+      returnInMinutes?: number | null;
       at?: number;
     }
   | { type: 'status/subline'; subline: string }
+  | { type: 'status/returnIn'; minutes: number | null; at?: number }
   | { type: 'status/resetTimer'; at?: number }
   | {
       type: 'task/add';

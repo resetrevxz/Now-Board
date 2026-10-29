@@ -41,7 +41,7 @@ small pieces of the editor.
 
 **Status:** accepted — 2026-10-24
 
-Board state is a single versioned JSON document (`STATE_VERSION = 1`) in
+Board state is a single versioned JSON document (`STATE_VERSION = 3`) in
 Electron's `userData` directory. A database would be overkill for a personal
 board and would make export/restore harder to reason about.
 
@@ -55,6 +55,12 @@ backups are retained. Reset and restore archive the current file under
 strings (including a UTF-8 BOM), validates the basic board shape, rejects newer
 schema versions, and clamps text, colors, dates, priorities, lists, settings,
 and session data. Import failures leave the active board untouched.
+
+Version 3 adds the custom board name, clock format, daily focus target, and
+native-notification preference. Version 2 added the sleeping status kind and the
+optional epoch-millisecond `returnAt` field. Older boards normalize missing
+fields to safe defaults; unknown status kinds collapse to `focus`, while the
+three known quiet kinds are preserved.
 
 The renderer has a `localStorage` fallback for browser-only visual work and
 tests. It is not the supported production store.
@@ -73,6 +79,12 @@ Privacy is per item: a private task can live beside public work, and private is
 never inferred from “not currently visible.” The status **subline is public** by
 design because it is part of the status itself; the UI and README warn against
 putting sensitive text there.
+
+Quiet statuses (`break`, `away`, `sleep`) are scrubbed in the selector, not by
+hiding DOM. Goals, up-next tasks, the Now task, task stats, and the note are
+emptied before the projection is built, so both Present and the LAN snapshot see
+the same quiet model. The dedicated scene does not render the work timeline.
+Private items remain filtered in focus statuses.
 
 Panic is a separate full-screen overlay. It is instantaneous, covers both
 Present and Edit, and leaves the underlying state untouched. It is not a privacy
@@ -111,16 +123,20 @@ dedupe. Without it, a global shortcut can be delivered both by Electron and the
 local key handler, causing a double toggle. The gate is action-scoped, so Panic
 and Present remain independent.
 
-Local shortcuts are `1`–`9` for status presets, `n` for quick add, `f` and
-`Shift+F` for the focus timer, `Ctrl+K` for the command palette, `Ctrl+,` for
-settings, and `Escape` for overlays. Global shortcuts are `Ctrl+Shift+P`
-(Present), `Ctrl+Shift+B` (Panic), and `Ctrl+Alt+O` (Open). `Ctrl+Shift+O` was
-the first choice for Open, but it was already reserved on the development
-machine, so the default moved to `Ctrl+Alt+O`. Registration failures are surfaced
-in Settings instead of silently disabling the feature.
+Local shortcuts are `1`–`9` for status presets, `n` for quick add, `b` / `a` /
+`s` for a 5-minute break, 30-minute away, and sleeping, `r` for a 25-minute
+focus return, `f` and `Shift+F` for the focus timer, `Ctrl+K` for the command
+palette, `Ctrl+,` for settings, and `Escape` for overlays. Global shortcuts are
+`Ctrl+Shift+P` (Present), `Ctrl+Shift+B` (Panic), `Ctrl+Alt+O` (Open), and
+`Ctrl+Alt+N` (Quick capture). `Ctrl+Shift+O` was the first choice for Open, but
+it was already reserved on the development machine, so the default moved to
+`Ctrl+Alt+O`. Registration failures are surfaced in Settings instead of silently
+disabling the feature.
 
-Single-key shortcuts are ignored while typing, while a dialog is open, and in
-Present mode. All controls remain reachable with Tab and the keyboard.
+The tray mirrors the explicit actions: capture a task, pause or resume the
+timer, and the same status quick modes. Single-key shortcuts are ignored while
+typing, while a dialog is open, and in Present mode. All controls remain
+reachable with Tab and the keyboard.
 
 ## D7 — Focus timer uses wall-clock anchors
 
@@ -269,3 +285,33 @@ embedded icon, avoiding a reference into `app.asar`. In development it targets
 Electron with the app path as an argument. A shortcut points at the release
 folder it was created from; moving the portable build requires recreating it.
 There is still no installer, Start-menu registration, or auto-updater.
+
+## D15 - 1.1 rhythm features stay explicit, local, and quiet
+
+**Status:** accepted - 2026-10-29
+
+The 1.1 additions make the board more useful without turning it into a scheduler
+or a cloud service:
+
+- **Clock format** is display-only. The system locale remains the default; 12h
+  and 24h are explicit overrides. Parsing the locale parts once fixed a doubled
+  colon that appeared in some system formats.
+- **Daily focus goal** is an aggregate of today's session history, not a target
+  that starts or stops anything. Zero means off; 30-minute increments up to eight
+  hours are deliberate and easy to scan.
+- **Return and wake times** are cues, never automation. Options adapt to the
+  status kind, and a custom time rolls to tomorrow when the clock time has
+  already passed. Sleeping labels say "wake" instead of "back".
+- **Notifications** are created in the main process, remain local, and contain
+  only generic timer/return copy. No task, goal, note, or subline text is sent to
+  the operating system.
+- **Quick capture and quick modes** are explicit human actions. The global
+  shortcut brings the window forward and focuses quick add; the local
+  `b`/`a`/`s`/`r` keys change status only while Edit is focused and no text field
+  is active.
+- **Board name** is presentation metadata, not a second profile. It appears in
+  the title bar, Present header, share title, and tray tooltip while the data
+  model stays a single board.
+- **Quiet privacy** extends to the new daily target: break, away, and sleeping
+  snapshots zero the daily target, timeline, and streak alongside emptying tasks,
+  goals, stats, and notes.
