@@ -12,6 +12,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 
 const exe = path.resolve('release/Now Board-win32-x64/Now Board.exe');
+const packageJson = JSON.parse(readFileSync(path.resolve('package.json'), 'utf8'));
 const dataDir = mkdtempSync(path.join(tmpdir(), 'now-board-packaged-'));
 const desktopDir = mkdtempSync(path.join(tmpdir(), 'now-board-desktop-'));
 const failures = [];
@@ -54,6 +55,11 @@ try {
   console.log('bridge:', JSON.stringify(bridgeInfo));
   check(bridgeInfo.present, 'preload bridge is present');
   check(bridgeInfo.notify, 'native notification bridge is exposed');
+  const versionTag = (await page.locator('.version-tag').innerText()).trim();
+  check(
+    versionTag.includes(packageJson.version),
+    `packaged app displays v${packageJson.version}`,
+  );
 
   await page.keyboard.press('n');
   await page.locator('.quick-add input').fill('Packaged smoke task');

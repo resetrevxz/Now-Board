@@ -47,6 +47,9 @@ export function Titlebar({
           </span>
           <span className="brand-name">{boardName}</span>
           <span className="mode-tag">Edit</span>
+          <span className="version-tag" title="Installed version">
+            v{__APP_VERSION__}
+          </span>
         </div>
         <span className="titlebar__context" aria-hidden="true">
           A quiet place for the work in front of you.

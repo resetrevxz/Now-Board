@@ -96,6 +96,8 @@
   away, `s` for sleeping, and `r` for a 25-minute focus return.
 - Added a customizable board name across the title bar, Present header, share
   title, and tray tooltip.
+- Added a visible installed-version badge in the title bar and Settings so the
+  running build is easy to confirm.
 - Updated the quiet projection so the daily focus target, timeline history, and
   streak are zeroed along with tasks, goals, stats, and notes.
 - Updated tests, screenshots, documentation, and the packaged smoke checks for
@@ -114,8 +116,8 @@
   content removal, quiet snapshot with zeroed work progress, and share DOM
   checks.
 - `npm run package` - portable `release\Now Board-win32-x64` 1.1 build.
-- `npm run verify:packaged` - packaged bridge, state v3, 1.1 settings, desktop
-  shortcut target, global shortcuts, and close-to-tray.
+- `npm run verify:packaged` - packaged bridge, visible v1.1.0 badge, state v3,
+  1.1 settings, desktop shortcut target, global shortcuts, and close-to-tray.
 - `npm run shortcut` - refreshed `Now Board.lnk` against the 1.1 executable.
 
 ## Current state

@@ -699,6 +699,8 @@ export function SettingsDrawer({
           global shortcuts, backups and the share server are unavailable.
         </p>
       ) : null}
+
+      <p className="settings-note settings-version">Now Board v{__APP_VERSION__} · local-first</p>
     </Modal>
   );
 }
