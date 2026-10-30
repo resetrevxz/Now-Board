@@ -116,8 +116,8 @@
   content removal, quiet snapshot with zeroed work progress, and share DOM
   checks.
 - `npm run package` - portable `release\Now Board-win32-x64` 1.1 build.
-- `npm run verify:packaged` - packaged bridge, visible v1.1.0 badge, state v3,
-  1.1 settings, desktop shortcut target, global shortcuts, and close-to-tray.
+- `npm run verify:packaged` - packaged bridge, visible v1.1.0 badge, state schema
+  4, 1.1 settings, desktop shortcut target, global shortcuts, and close-to-tray.
 - `npm run shortcut` - refreshed `Now Board.lnk` against the 1.1 executable.
 
 ## Current state
@@ -127,3 +127,34 @@
 - The installer remains deliberately out of scope: the artifact is an unsigned
   portable folder, and the desktop shortcut points at its current location.
 - No unresolved blockers.
+
+## 2026-10-30 - Performance pass
+
+- Measured the idle board before changing anything: the always-on background
+  drift kept the compositor busy at roughly **40-95% of one core**, depending on
+  how soon the sample started, with the GPU process doing most of the work. The
+  same board with the drift paused settled around **1-4% of one core**.
+- Turned **Ambient motion** into an opt-in effect. It now defaults to off, and
+  the schema moved to `STATE_VERSION = 4` so boards saved with the old default
+  are upgraded to the still background on load and written back with the next
+  save. The Settings copy explains the GPU trade-off.
+- Removed `will-change: transform` from the ambient orbs so their large layers
+  are not reserved in GPU memory while the drift is off.
+- Paused ambient drift whenever the window is hidden.
+- Removed every always-on `backdrop-filter` (title bar, palette scrim, dialog
+  scrim, toast, Present mode hint) and replaced the two large `filter: blur()`
+  glows in Present and Panic with soft radial gradients. Same calm look, no
+  per-frame re-blur.
+- Stopped waking React every second when nothing needs seconds: Today ticks at
+  30s unless the focus timer is running, and Present ticks at 30s unless a focus
+  timer or return countdown is live. Timeline and streak work in Today is
+  memoized to the minute.
+- `buildPresentViewModel` is only computed while Present is actually open.
+- Chromium background throttling is on by default again; the renderer asks for
+  precise timers (via `webContents.setBackgroundThrottling`) only while a
+  countdown or the LAN share needs them, so hidden windows can idle without
+  delaying timer or return notifications.
+- Verified with a settled A/B probe: static Edit and Present now sit at **0-1%
+  of one core** (occasional short GC spikes), versus ~50% with drift forced on.
+  The packaged app, state schema 4, screenshots, and `npm run verify` all pass.
+

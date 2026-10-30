@@ -327,7 +327,7 @@ function normalizeFocus(raw: unknown): BoardState['focus'] {
   };
 }
 
-function normalizeSettings(raw: unknown): Settings {
+function normalizeSettings(raw: unknown, sourceVersion: number): Settings {
   const base = DEFAULT_SETTINGS;
   if (!isRecord(raw)) {
     return {
@@ -344,6 +344,13 @@ function normalizeSettings(raw: unknown): Settings {
       present[key] = presentRaw[key] as boolean;
     }
   }
+  // Boards from before v4 had ambient drift on by default. It is now opt-in
+  // because a continuous compositor animation is the main idle GPU cost, so
+  // upgrade those boards to the still background on load.
+  const ambientMotion =
+    sourceVersion >= 4 && typeof raw.ambientMotion === 'boolean'
+      ? raw.ambientMotion
+      : base.ambientMotion;
   return {
     theme: oneOf(raw.theme, ['dark', 'light'] as const, base.theme),
     accent: oneOf(
@@ -352,8 +359,7 @@ function normalizeSettings(raw: unknown): Settings {
       base.accent,
     ),
     background: oneOf(raw.background, ['gradient', 'solid'] as const, base.background),
-    ambientMotion:
-      typeof raw.ambientMotion === 'boolean' ? raw.ambientMotion : base.ambientMotion,
+    ambientMotion,
     reduceMotion:
       typeof raw.reduceMotion === 'boolean' ? raw.reduceMotion : base.reduceMotion,
     fontScale: clampNumber(raw.fontScale, 0.85, 1.3, base.fontScale),
@@ -407,6 +413,7 @@ export function normalizeBoard(input: unknown, now = Date.now()): BoardState {
       'This backup was made by a newer version of Now Board. Update the app first.',
     );
   }
+  const sourceVersion = typeof data.version === 'number' ? data.version : 0;
 
   const fallback = createInitialState(now);
   const presets = normalizePresets(data.presets);
@@ -459,7 +466,7 @@ export function normalizeBoard(input: unknown, now = Date.now()): BoardState {
     notes,
     notesPrivate: Boolean(data.notesPrivate),
     focus: normalizeFocus(data.focus),
-    settings: normalizeSettings(data.settings),
+    settings: normalizeSettings(data.settings, sourceVersion),
     meta: { createdAt, updatedAt },
   };
 }

@@ -70,7 +70,7 @@ try {
     saved.tasks.some((task) => task.title === 'Packaged smoke task'),
     'packaged app saves a task locally',
   );
-  check(saved.version === 3, 'packaged app writes state version 3');
+  check(saved.version === 4, 'packaged app writes state version 4');
   check(
     typeof saved.settings?.boardName === 'string' &&
       typeof saved.settings?.clockFormat === 'string' &&

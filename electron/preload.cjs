@@ -32,6 +32,7 @@ contextBridge.exposeInMainWorld('nowboard', {
   setLoginItem: (value) => ipcRenderer.invoke('app:set-login-item', value),
   setKeepAwake: (value) => ipcRenderer.invoke('app:set-keep-awake', value),
   setCloseToTray: (value) => ipcRenderer.invoke('app:set-close-to-tray', value),
+  setPreciseTimers: (value) => ipcRenderer.send('app:precise-timers', Boolean(value)),
   setTrayStatus: (text) => ipcRenderer.send('app:tray-status', text),
   notify: (payload) => ipcRenderer.send('app:notify', payload),
   createDesktopShortcut: () => ipcRenderer.invoke('app:create-desktop-shortcut'),

@@ -388,7 +388,9 @@ function createWindow() {
       nodeIntegration: false,
       sandbox: true,
       spellcheck: true,
-      backgroundThrottling: false,
+      // Chromium may throttle a hidden window; the renderer asks for precise
+      // timers only while a countdown or live share actually needs them.
+      backgroundThrottling: true,
     },
   });
 
@@ -772,6 +774,14 @@ ipcMain.handle('app:set-keep-awake', (_event, value) => {
 ipcMain.handle('app:set-close-to-tray', (_event, value) => {
   closeToTray = Boolean(value);
   return closeToTray;
+});
+
+ipcMain.on('app:precise-timers', (_event, value) => {
+  // Only a live countdown or LAN share needs an unthrottled renderer. Everything
+  // else can let Chromium slow a hidden window down and save CPU/GPU.
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.setBackgroundThrottling(!value);
+  }
 });
 
 ipcMain.on('app:tray-status', (_event, text) => {

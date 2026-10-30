@@ -305,7 +305,7 @@ export function SettingsDrawer({
 
           <InlineToggle
             label="Ambient motion"
-            detail="A very slow drift in the background. Paused when reduce motion is on."
+            detail="A very slow drift in the background. Off by default because it keeps the GPU warm; turn it on if you like the movement."
             checked={settings.ambientMotion}
             onChange={(ambientMotion) => update({ ambientMotion })}
           />

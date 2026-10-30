@@ -765,7 +765,6 @@
   justify-content: center;
   padding: 24px;
   background: var(--scrim);
-  backdrop-filter: blur(8px) saturate(0.94);
   animation: fade-in 180ms var(--ease-soft);
 }
 
@@ -908,12 +907,11 @@
   padding: 7px 8px 7px 12px;
   border: 1px solid var(--line-strong);
   border-radius: var(--radius-md);
-  background: color-mix(in srgb, var(--surface-3) 92%, transparent);
+  background: color-mix(in srgb, var(--surface-3) 98%, transparent);
   color: var(--text);
   font-size: 12.5px;
   line-height: 1.4;
   box-shadow: var(--shadow-popover);
-  backdrop-filter: blur(18px);
   pointer-events: auto;
   animation: toast-in 260ms var(--ease-out);
 }

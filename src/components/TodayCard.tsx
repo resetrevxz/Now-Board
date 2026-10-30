@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import type { CSSProperties } from 'react';
 import type { Action, BoardState, FocusMode } from '../state/types';
 import {
@@ -21,22 +22,34 @@ export function TodayCard({
   state: BoardState;
   dispatch: (action: Action) => void;
 }) {
-  const now = useNow(1000);
+  // Only a running timer needs a live seconds display. An idle board just needs
+  // the wall clock to stay inside the current minute, so tick far less often.
+  const running = state.focus.running;
+  const now = useNow(running ? 1000 : 30_000);
   const clock = clockParts(now, state.settings.clockFormat);
   const remaining = focusRemainingSeconds(state, now);
   const progress =
     state.focus.durationSec > 0
       ? ((state.focus.durationSec - remaining) / state.focus.durationSec) * 100
       : 0;
-  const timeline = buildTimeline(state.sessions, now);
+  // Timeline and streak are minute-granular; keying them to the minute keeps
+  // the per-second timer cheap without changing what is shown.
+  const minuteBucket = Math.floor(now / 60_000);
+  const timelineNow = minuteBucket * 60_000;
+  const timeline = useMemo(
+    () => buildTimeline(state.sessions, timelineNow),
+    [state.sessions, timelineNow],
+  );
   const focusTargetMs = state.settings.focusTargetMin * 60_000;
   const focusTargetProgress =
     focusTargetMs > 0 ? Math.min(100, (timeline.focusMs / focusTargetMs) * 100) : 0;
-  const streak = computeStreak(state.sessions, now);
+  const streak = useMemo(
+    () => computeStreak(state.sessions, timelineNow),
+    [state.sessions, timelineNow],
+  );
   const totalTasks = state.tasks.length;
   const doneTasks = state.tasks.filter((task) => task.done).length;
 
-  const running = state.focus.running;
   const timerState = running
     ? state.focus.mode === 'focus'
       ? 'In focus'

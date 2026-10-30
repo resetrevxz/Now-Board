@@ -61,7 +61,9 @@ export const DEFAULT_SETTINGS: Settings = {
   theme: 'dark',
   accent: 'status',
   background: 'gradient',
-  ambientMotion: true,
+  // Off by default: a continuously animating background keeps the compositor
+  // (and in software rendering, the CPU) busy even while the board is idle.
+  ambientMotion: false,
   reduceMotion: false,
   fontScale: 1,
   density: 'comfortable',

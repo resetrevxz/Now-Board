@@ -146,6 +146,17 @@ describe('normalizeBoard', () => {
     expect(oldBoard.settings.clockFormat).toBe('system');
     expect(oldBoard.settings.focusTargetMin).toBe(240);
     expect(oldBoard.settings.notifyOnTimer).toBe(true);
+    expect(oldBoard.settings.ambientMotion).toBe(false);
+
+    const keepsMotion = normalizeBoard(
+      {
+        version: STATE_VERSION,
+        tasks: [],
+        settings: { ambientMotion: true },
+      },
+      NOW,
+    );
+    expect(keepsMotion.settings.ambientMotion).toBe(true);
 
     const sleeping = normalizeBoard(
       {

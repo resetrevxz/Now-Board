@@ -88,7 +88,13 @@ export function PresentScreen({
   showHint?: boolean;
   share?: boolean;
 }) {
-  const now = useNow(1000);
+  // Seconds only matter while a focus timer or a return countdown is live.
+  // Everything else is minute-granular, so an idle Present screen stops waking
+  // up every second.
+  const needsSeconds =
+    view.focus.running ||
+    (view.status.returnAt !== null && view.status.returnAt > Date.now() - 1000);
+  const now = useNow(needsSeconds ? 1000 : 30_000);
   const settings = view.settings;
 
   useEffect(() => {

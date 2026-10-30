@@ -520,9 +520,13 @@ html[data-panic='true'] .toast-viewport {
   width: min(720px, 60vw);
   aspect-ratio: 1;
   border-radius: 50%;
-  background: var(--accent);
-  filter: blur(170px);
-  opacity: 0.09;
+  background: radial-gradient(
+    circle at 50% 50%,
+    var(--accent) 0%,
+    color-mix(in srgb, var(--accent) 30%, transparent) 40%,
+    transparent 72%
+  );
+  opacity: 0.12;
   transform: translateY(-50%);
   pointer-events: none;
 }

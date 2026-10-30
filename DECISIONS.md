@@ -41,7 +41,7 @@ small pieces of the editor.
 
 **Status:** accepted — 2026-10-24
 
-Board state is a single versioned JSON document (`STATE_VERSION = 3`) in
+Board state is a single versioned JSON document (`STATE_VERSION = 4`) in
 Electron's `userData` directory. A database would be overkill for a personal
 board and would make export/restore harder to reason about.
 

@@ -472,6 +472,20 @@ function BoardApp() {
     return () => clearInterval(timer);
   }, [state?.current.kind, state?.current.returnAt]);
 
+  useEffect(() => {
+    const bridge = getBridge();
+    if (!bridge) return;
+    const returnAt = state?.current.returnAt ?? null;
+    // Ask Chromium to keep the renderer at full speed only when a live countdown
+    // or the LAN share actually needs sub-minute updates. Otherwise a hidden
+    // window is allowed to throttle.
+    bridge.setPreciseTimers(
+      Boolean(state?.focus.running) ||
+        (returnAt !== null && returnAt > Date.now()) ||
+        Boolean(state?.settings.lanShare.enabled),
+    );
+  }, [state?.current.returnAt, state?.focus.running, state?.settings.lanShare.enabled]);
+
   // -------------------------------------------------------------------- data
 
   const handleExport = useCallback(async () => {
@@ -732,7 +746,10 @@ function BoardApp() {
 
   // -------------------------------------------------------------------- view
 
-  const presentView = useMemo(() => (state ? buildPresentViewModel(state) : null), [state]);
+  const presentView = useMemo(
+    () => (state && mode === 'present' ? buildPresentViewModel(state) : null),
+    [mode, state],
+  );
 
   return (
     <div className="app-root" data-mode={mode} data-panic={panic ? 'true' : 'false'}>

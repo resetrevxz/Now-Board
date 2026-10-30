@@ -20,8 +20,7 @@
   height: var(--titlebar-h);
   padding: 0 8px 0 18px;
   border-bottom: 1px solid var(--line-soft);
-  background: color-mix(in srgb, var(--bg) 72%, transparent);
-  backdrop-filter: blur(18px) saturate(1.05);
+  background: color-mix(in srgb, var(--bg) 94%, transparent);
 }
 
 .titlebar__drag {
@@ -1874,7 +1873,6 @@
   justify-content: center;
   padding: 11vh 20px 20px;
   background: var(--scrim-soft);
-  backdrop-filter: blur(6px);
   animation: fade-in 150ms var(--ease-soft);
 }
 

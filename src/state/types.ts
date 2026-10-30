@@ -1,4 +1,4 @@
-export const STATE_VERSION = 3;
+export const STATE_VERSION = 4;
 
 export type ThemeMode = 'dark' | 'light';
 export type ClockFormat = 'system' | '12h' | '24h';

@@ -208,7 +208,7 @@ finished.
 
 ## Data, backups, and recovery
 
-The live board is one versioned JSON document (`STATE_VERSION = 3`) stored in
+The live board is one versioned JSON document (`STATE_VERSION = 4`) stored in
 Electron's `userData` folder. Settings shows the exact location under **Data**.
 Version 3 adds the board name, clock format, daily focus target, and notification
 preference. Version 2 added the sleeping status kind and return times; older
@@ -250,6 +250,11 @@ testing and development, not as the recommended desktop storage.
   tokens checked for WCAG AA contrast on their surfaces.
 - **Packaging:** `@electron/packager` produces a portable Windows x64 build;
   a dependency-free Node script generates the PNG/ICO icon.
+- **Performance:** the board is designed to sit idle at roughly zero CPU. No
+  always-on `backdrop-filter` or large `filter: blur()` layers, ambient drift is
+  opt-in, and React only ticks once a second while a countdown is live.
+  Chromium background throttling is requested back whenever no timer or LAN share
+  needs sub-minute updates.
 
 See [DECISIONS.md](DECISIONS.md) for the reasoning behind the larger choices and
 [PROGRESS.md](PROGRESS.md) for the build and verification log.
