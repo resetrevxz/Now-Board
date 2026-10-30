@@ -64,7 +64,7 @@ function directorySize(dir) {
 console.log('Packaging Now Board for Windows x64…');
 const appPaths = await packager({
   dir: root,
-  out: path.join(root, 'release'),
+  out: process.env.NOW_BOARD_PACKAGE_OUT || path.join(root, 'release'),
   name: 'Now Board',
   executableName: 'Now Board',
   platform: 'win32',

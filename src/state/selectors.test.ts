@@ -53,6 +53,7 @@ describe('buildPresentViewModel privacy', () => {
         description: 'Private plans',
         progress: 20,
         milestones: [],
+        status: 'active',
         isPrivate: true,
         createdAt: NOW,
       },
@@ -62,6 +63,7 @@ describe('buildPresentViewModel privacy', () => {
         description: 'Shareable plans',
         progress: 40,
         milestones: [],
+        status: 'active',
         isPrivate: false,
         createdAt: NOW,
       },
@@ -99,6 +101,18 @@ describe('buildPresentViewModel privacy', () => {
 
     expect(view.nowTask).toBeNull();
     expect(view.upNext.length).toBeGreaterThan(0);
+  });
+
+  it('does not expose private linked tasks through public goal metrics', () => {
+    const board = state();
+    const goal = board.goals[0]!;
+    const task = board.tasks[0]!;
+    board.goals = [{ ...goal, milestones: [], progress: 20, isPrivate: false }];
+    board.tasks = [{ ...task, goalId: goal.id, done: true, isPrivate: false }];
+    const before = buildPresentViewModel(board, NOW).goals;
+    board.tasks.push({ ...task, goalId: goal.id, id: 'private-linked', done: false, isPrivate: true });
+    expect(buildPresentViewModel(board, NOW).goals).toEqual(before);
+    expect(before[0]).toMatchObject({ progress: 100, linkedTasks: 1, linkedTasksDone: 1 });
   });
 
   it.each(['break', 'away', 'sleep'] as const)(

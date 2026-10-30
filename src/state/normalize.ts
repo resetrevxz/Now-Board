@@ -1,8 +1,10 @@
 import type {
+  Area,
   BoardState,
   CurrentStatus,
   FocusMode,
   Goal,
+  GoalStatus,
   Milestone,
   Priority,
   Session,
@@ -14,6 +16,7 @@ import type {
 } from './types';
 import { STATE_VERSION } from './types';
 import {
+  AREA_COLORS,
   DEFAULT_PRESETS,
   DEFAULT_SETTINGS,
   createInitialState,
@@ -56,38 +59,47 @@ function isPriority(value: unknown): value is Priority {
   return value === 'low' || value === 'medium' || value === 'high';
 }
 
-function isIsoDate(value: unknown): value is string {
-  if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
-  const [y, m, d] = value.split('-').map(Number);
-  if (!y || !m || !d) return false;
-  const date = new Date(y, m - 1, d, 12);
-  return date.getFullYear() === y && date.getMonth() === m - 1 && date.getDate() === d;
+function isGoalStatus(value: unknown): value is GoalStatus {
+  return value === 'active' || value === 'paused' || value === 'done';
 }
 
-function normalizePresets(raw: unknown): StatusPreset[] {
+function normalizeAreas(raw: unknown, now: number): Area[] {
   const seen = new Set<string>();
-  const presets: StatusPreset[] = [];
+  const areas: Area[] = [];
   for (const item of asArray(raw)) {
     if (!isRecord(item)) continue;
-    const label = cleanLine(item.label, 48, '');
-    if (!label) continue;
-    let id = cleanLine(item.id, 40, '') || makeId('preset');
-    while (seen.has(id)) id = makeId('preset');
+    const name = cleanLine(item.name, 32, '');
+    if (!name) continue;
+    let id = cleanLine(item.id, 40, '') || makeId('area');
+    while (seen.has(id)) id = makeId('area');
     seen.add(id);
-    presets.push({
+    areas.push({
       id,
-      label,
-      emoji: cleanLine(item.emoji, 8, '•'),
-      color: isHexColor(item.color) ? item.color : '#4ADE9D',
-      kind: isStatusKind(item.kind) ? item.kind : 'focus',
+      name,
+      emoji: cleanLine(item.emoji, 8, '📁'),
+      color: isHexColor(item.color) ? item.color : AREA_COLORS[areas.length % AREA_COLORS.length]!,
+      createdAt: timestamp(item.createdAt, now),
     });
-    if (presets.length >= 16) break;
+    if (areas.length >= 8) break;
   }
-  return presets.length > 0 ? presets : DEFAULT_PRESETS.map((p) => ({ ...p }));
+  if (areas.length === 0) {
+    // Boards from before v5 had one flat list of projects. Keep them together
+    // under a single, renameable area rather than inventing categories.
+    areas.push({
+      id: 'area_workspace',
+      name: 'Workspace',
+      emoji: '📁',
+      color: AREA_COLORS[0],
+      createdAt: now,
+    });
+  }
+  return areas;
 }
 
-function normalizeLists(raw: unknown, now: number): TaskList[] {
+function normalizeLists(raw: unknown, areas: Area[], now: number): TaskList[] {
   const seen = new Set<string>();
+  const areaIds = new Set(areas.map((area) => area.id));
+  const defaultArea = areas[0]?.id ?? 'area_workspace';
   const lists: TaskList[] = [];
   for (const item of asArray(raw)) {
     if (!isRecord(item)) continue;
@@ -96,17 +108,29 @@ function normalizeLists(raw: unknown, now: number): TaskList[] {
     let id = cleanLine(item.id, 40, '') || makeId('list');
     while (seen.has(id)) id = makeId('list');
     seen.add(id);
-    lists.push({ id, name, createdAt: timestamp(item.createdAt, now) });
-    if (lists.length >= 12) break;
+    const areaId = cleanLine(item.areaId, 40, '');
+    lists.push({
+      id,
+      name,
+      areaId: areaIds.has(areaId) ? areaId : defaultArea,
+      createdAt: timestamp(item.createdAt, now),
+    });
+    if (lists.length >= 24) break;
   }
   if (lists.length === 0) {
-    lists.push({ id: 'list_today', name: 'Today', createdAt: now });
+    lists.push({ id: 'list_today', name: 'Today', areaId: defaultArea, createdAt: now });
   }
   return lists;
 }
 
-function normalizeTasks(raw: unknown, lists: TaskList[], now: number): Task[] {
+function normalizeTasks(
+  raw: unknown,
+  lists: TaskList[],
+  goals: Goal[],
+  now: number,
+): Task[] {
   const listIds = new Set(lists.map((list) => list.id));
+  const goalIds = new Set(goals.map((goal) => goal.id));
   const defaultList = lists[0]?.id ?? 'list_today';
   const seen = new Set<string>();
   const tasks: Task[] = [];
@@ -120,6 +144,7 @@ function normalizeTasks(raw: unknown, lists: TaskList[], now: number): Task[] {
     seen.add(id);
     const done = Boolean(item.done);
     const listId = cleanLine(item.listId, 40, '');
+    const goalId = cleanLine(item.goalId, 40, '');
     const isNow = Boolean(item.isNow) && !done && !hasNow;
     if (isNow) hasNow = true;
     tasks.push({
@@ -132,15 +157,17 @@ function normalizeTasks(raw: unknown, lists: TaskList[], now: number): Task[] {
       isPrivate: Boolean(item.isPrivate),
       createdAt: timestamp(item.createdAt, now),
       completedAt: done ? timestamp(item.completedAt, now) : undefined,
+      goalId: goalIds.has(goalId) ? goalId : undefined,
     });
     if (tasks.length >= 300) break;
   }
   return tasks;
 }
 
-function normalizeGoals(raw: unknown, now: number): Goal[] {
+function normalizeGoals(raw: unknown, areas: Area[], now: number): Goal[] {
   const seen = new Set<string>();
   const goals: Goal[] = [];
+  const areaIds = new Set(areas.map((area) => area.id));
   for (const item of asArray(raw)) {
     if (!isRecord(item)) continue;
     const title = cleanLine(item.title, 90, '');
@@ -169,6 +196,7 @@ function normalizeGoals(raw: unknown, now: number): Goal[] {
       milestones.length > 0
         ? Math.round((doneMilestones / milestones.length) * 100)
         : Math.round(clampNumber(item.progress, 0, 100, 0));
+    const areaId = cleanLine(item.areaId, 40, '');
     goals.push({
       id,
       title,
@@ -176,12 +204,44 @@ function normalizeGoals(raw: unknown, now: number): Goal[] {
       progress,
       milestones,
       targetDate: isIsoDate(item.targetDate) ? item.targetDate : undefined,
+      areaId: areaIds.has(areaId) ? areaId : undefined,
+      status: isGoalStatus(item.status) ? item.status : 'active',
       isPrivate: Boolean(item.isPrivate),
       createdAt: timestamp(item.createdAt, now),
     });
     if (goals.length >= 40) break;
   }
   return goals;
+}
+
+function isIsoDate(value: unknown): value is string {
+  if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const [y, m, d] = value.split('-').map(Number);
+  if (!y || !m || !d) return false;
+  const date = new Date(y, m - 1, d, 12);
+  return date.getFullYear() === y && date.getMonth() === m - 1 && date.getDate() === d;
+}
+
+function normalizePresets(raw: unknown): StatusPreset[] {
+  const seen = new Set<string>();
+  const presets: StatusPreset[] = [];
+  for (const item of asArray(raw)) {
+    if (!isRecord(item)) continue;
+    const label = cleanLine(item.label, 48, '');
+    if (!label) continue;
+    let id = cleanLine(item.id, 40, '') || makeId('preset');
+    while (seen.has(id)) id = makeId('preset');
+    seen.add(id);
+    presets.push({
+      id,
+      label,
+      emoji: cleanLine(item.emoji, 8, '•'),
+      color: isHexColor(item.color) ? item.color : '#4ADE9D',
+      kind: isStatusKind(item.kind) ? item.kind : 'focus',
+    });
+    if (presets.length >= 16) break;
+  }
+  return presets.length > 0 ? presets : DEFAULT_PRESETS.map((p) => ({ ...p }));
 }
 
 function normalizeCurrent(
@@ -402,9 +462,15 @@ export function normalizeBoard(input: unknown, now = Date.now()): BoardState {
   if (!isRecord(data)) {
     throw new BoardValidationError('That file does not look like a Now Board backup.');
   }
-  const looksLikeBoard = ['current', 'tasks', 'goals', 'lists', 'sessions', 'settings'].some(
-    (key) => key in data,
-  );
+  const looksLikeBoard = [
+    'current',
+    'tasks',
+    'goals',
+    'lists',
+    'areas',
+    'sessions',
+    'settings',
+  ].some((key) => key in data);
   if (!looksLikeBoard) {
     throw new BoardValidationError('That file does not look like a Now Board backup.');
   }
@@ -417,13 +483,20 @@ export function normalizeBoard(input: unknown, now = Date.now()): BoardState {
 
   const fallback = createInitialState(now);
   const presets = normalizePresets(data.presets);
-  const lists = normalizeLists(data.lists, now);
+  const areas = normalizeAreas(data.areas, now);
+  const lists = normalizeLists(data.lists, areas, now);
   const activeListRaw = cleanLine(data.activeListId, 40, '');
   const activeListId = lists.some((list) => list.id === activeListRaw)
     ? activeListRaw
     : (lists[0]?.id ?? 'list_today');
-  const tasks = normalizeTasks(data.tasks, lists, now);
-  const goals = normalizeGoals(data.goals, now);
+  const activeListAreaId =
+    lists.find((list) => list.id === activeListId)?.areaId ?? areas[0]?.id ?? 'area_workspace';
+  const activeAreaRaw = cleanLine(data.activeAreaId, 40, '');
+  const activeAreaId = areas.some((area) => area.id === activeAreaRaw)
+    ? activeAreaRaw
+    : activeListAreaId;
+  const goals = normalizeGoals(data.goals, areas, now);
+  const tasks = normalizeTasks(data.tasks, lists, goals, now);
   const sessionsBeforeCurrent = asArray(data.sessions)
     .filter((item): item is JsonRecord => isRecord(item))
     .map((item) => ({
@@ -460,7 +533,9 @@ export function normalizeBoard(input: unknown, now = Date.now()): BoardState {
     presets,
     sessions,
     tasks,
+    areas,
     lists,
+    activeAreaId,
     activeListId,
     goals,
     notes,

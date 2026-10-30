@@ -1,4 +1,4 @@
-export const STATE_VERSION = 4;
+export const STATE_VERSION = 5;
 
 export type ThemeMode = 'dark' | 'light';
 export type ClockFormat = 'system' | '12h' | '24h';
@@ -17,6 +17,7 @@ export type Density = 'comfortable' | 'compact';
 export type Priority = 'low' | 'medium' | 'high';
 export type StatusKind = 'focus' | 'break' | 'away' | 'sleep';
 export type FocusMode = 'focus' | 'break';
+export type GoalStatus = 'active' | 'paused' | 'done';
 
 export interface StatusPreset {
   id: string;
@@ -47,6 +48,14 @@ export interface Session {
   endedAt: number | null;
 }
 
+export interface Area {
+  id: string;
+  name: string;
+  emoji: string;
+  color: string;
+  createdAt: number;
+}
+
 export interface Task {
   id: string;
   listId: string;
@@ -57,11 +66,14 @@ export interface Task {
   isPrivate: boolean;
   createdAt: number;
   completedAt?: number;
+  /** Optional link to a larger goal; drives goal progress. */
+  goalId?: string;
 }
 
 export interface TaskList {
   id: string;
   name: string;
+  areaId: string;
   createdAt: number;
 }
 
@@ -78,6 +90,8 @@ export interface Goal {
   progress: number;
   milestones: Milestone[];
   targetDate?: string;
+  areaId?: string;
+  status: GoalStatus;
   isPrivate: boolean;
   createdAt: number;
 }
@@ -142,7 +156,9 @@ export interface BoardState {
   presets: StatusPreset[];
   sessions: Session[];
   tasks: Task[];
+  areas: Area[];
   lists: TaskList[];
+  activeAreaId: string;
   activeListId: string;
   goals: Goal[];
   notes: string;
@@ -160,10 +176,16 @@ export type SettingsPatch = {
 
 export type TaskPatch = Partial<
   Pick<Task, 'title' | 'priority' | 'isPrivate' | 'listId'>
->;
+> & {
+  /** null clears the link, undefined leaves it untouched. */
+  goalId?: string | null;
+};
 
 export type GoalPatch = Partial<
-  Pick<Goal, 'title' | 'description' | 'progress' | 'targetDate' | 'isPrivate'>
+  Pick<
+    Goal,
+    'title' | 'description' | 'progress' | 'targetDate' | 'isPrivate' | 'areaId' | 'status'
+  >
 >;
 
 export interface TimelineSegment {
@@ -197,6 +219,8 @@ export interface PresentTask {
   title: string;
   priority: Priority;
   listName: string;
+  areaName: string;
+  areaColor: string;
 }
 
 export interface PresentGoal {
@@ -207,6 +231,20 @@ export interface PresentGoal {
   targetDate?: string;
   completedMilestones: number;
   totalMilestones: number;
+  nextMilestone?: string;
+  linkedTasks: number;
+  linkedTasksDone: number;
+  areaName?: string;
+  areaColor?: string;
+  status: GoalStatus;
+}
+
+export interface PresentPreset {
+  id: string;
+  label: string;
+  emoji: string;
+  color: string;
+  kind: StatusKind;
 }
 
 export interface PresentViewModel {
@@ -224,6 +262,8 @@ export interface PresentViewModel {
   upNext: PresentTask[];
   taskStats: { done: number; total: number };
   goals: PresentGoal[];
+  presets: PresentPreset[];
+  activePresetId: string | null;
   note: string | null;
   timeline: TimelineModel;
   streakDays: number;
@@ -285,6 +325,7 @@ export type Action =
       title: string;
       listId?: string;
       priority?: Priority;
+      goalId?: string;
       isNow?: boolean;
       id?: string;
       at?: number;
@@ -296,8 +337,13 @@ export type Action =
   | { type: 'task/reorder'; listId: string; taskId: string; beforeId: string | null }
   | { type: 'task/move'; id: string; direction: -1 | 1 }
   | { type: 'task/clearCompleted'; listId?: string }
-  | { type: 'list/add'; name: string; id?: string; at?: number }
+  | { type: 'area/add'; name: string; emoji?: string; color?: string; id?: string; at?: number }
+  | { type: 'area/update'; id: string; patch: Partial<Pick<Area, 'name' | 'emoji' | 'color'>> }
+  | { type: 'area/delete'; id: string }
+  | { type: 'area/activate'; id: string }
+  | { type: 'list/add'; name: string; areaId?: string; id?: string; at?: number }
   | { type: 'list/rename'; id: string; name: string }
+  | { type: 'list/move'; id: string; areaId: string }
   | { type: 'list/delete'; id: string }
   | { type: 'list/activate'; id: string }
   | {

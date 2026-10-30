@@ -262,6 +262,17 @@ function BoardApp() {
     setSettingsOpen(true);
   }, []);
 
+  const selectPresentPreset = useCallback(
+    (presetId: string) => {
+      const current = stateRef.current;
+      if (!current) return;
+      const preset = current.presets.find((entry) => entry.id === presetId);
+      if (!preset) return;
+      board.dispatch({ type: 'status/set', preset });
+    },
+    [board.dispatch],
+  );
+
   const openGoalEditor = useCallback((goalId: string | null) => {
     setPaletteOpen(false);
     setSettingsOpen(false);
@@ -795,7 +806,11 @@ function BoardApp() {
       ) : null}
 
       {board.phase === 'ready' && state && mode === 'present' && presentView ? (
-        <PresentScreen view={presentView} showHint={hintVisible} />
+        <PresentScreen
+          view={presentView}
+          showHint={hintVisible}
+          onSelectPreset={selectPresentPreset}
+        />
       ) : null}
 
       {state ? (
@@ -803,6 +818,7 @@ function BoardApp() {
           <GoalEditor
             open={goalEditor.open}
             goal={editingGoal}
+            state={state}
             dispatch={board.dispatch}
             onClose={closeGoalEditor}
           />

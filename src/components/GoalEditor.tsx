@@ -1,10 +1,11 @@
 import {
   useEffect,
+  useMemo,
   useState,
   type CSSProperties,
   type FormEvent,
 } from 'react';
-import type { Action, Goal, Milestone } from '../state/types';
+import type { Action, BoardState, Goal, GoalStatus, Milestone } from '../state/types';
 import { makeId } from '../state/reducer';
 import {
   Button,
@@ -14,14 +15,18 @@ import {
   Modal,
   ProgressBar,
   Ring,
+  Segmented,
 } from './ui';
 import { Icon } from './Icon';
+import { cx } from '../lib/cx';
 
 interface GoalDraft {
   title: string;
   description: string;
   targetDate: string;
   progress: number;
+  areaId: string;
+  status: GoalStatus;
   isPrivate: boolean;
 }
 
@@ -30,22 +35,27 @@ const EMPTY_DRAFT: GoalDraft = {
   description: '',
   targetDate: '',
   progress: 0,
+  areaId: '',
+  status: 'active',
   isPrivate: false,
 };
 
 export function GoalEditor({
   open,
   goal,
+  state,
   dispatch,
   onClose,
 }: {
   open: boolean;
   goal: Goal | null;
+  state: BoardState;
   dispatch: (action: Action) => void;
   onClose: () => void;
 }) {
   const [draft, setDraft] = useState<GoalDraft>(EMPTY_DRAFT);
   const [milestones, setMilestones] = useState<Milestone[]>([]);
+  const [linkedIds, setLinkedIds] = useState<Set<string>>(new Set());
   const [newMilestone, setNewMilestone] = useState('');
   const [deleteOpen, setDeleteOpen] = useState(false);
 
@@ -58,20 +68,74 @@ export function GoalEditor({
             description: goal.description,
             targetDate: goal.targetDate ?? '',
             progress: Math.round(goal.progress),
+            areaId: goal.areaId ?? '',
+            status: goal.status,
             isPrivate: goal.isPrivate,
           }
-        : EMPTY_DRAFT,
+        : {
+            ...EMPTY_DRAFT,
+            areaId: state.activeAreaId ?? state.areas[0]?.id ?? '',
+          },
     );
     setMilestones(goal ? goal.milestones.map((milestone) => ({ ...milestone })) : []);
+    setLinkedIds(
+      new Set(
+        goal
+          ? state.tasks.filter((task) => task.goalId === goal.id).map((task) => task.id)
+          : [],
+      ),
+    );
     setNewMilestone('');
     setDeleteOpen(false);
-  }, [open, goal]);
+  }, [open, goal, state.activeAreaId, state.areas, state.tasks]);
+
+  const tasks = useMemo(() => {
+    const areaLists = new Map(state.lists.map((list) => [list.id, list]));
+    const areaById = new Map(state.areas.map((area) => [area.id, area]));
+    const rank = { high: 0, medium: 1, low: 2 } as const;
+    return [...state.tasks]
+      .filter((task) => !task.done || linkedIds.has(task.id))
+      .sort((a, b) => {
+        if (a.done !== b.done) return a.done ? 1 : -1;
+        if (a.goalId && !b.goalId) return -1;
+        if (!a.goalId && b.goalId) return 1;
+        const priority = rank[a.priority] - rank[b.priority];
+        if (priority !== 0) return priority;
+        return a.createdAt - b.createdAt;
+      })
+      .map((task) => {
+        const list = areaLists.get(task.listId);
+        return {
+          task,
+          project: list?.name ?? 'Project',
+          area: list ? areaById.get(list.areaId) : undefined,
+        };
+      });
+  }, [linkedIds, state.areas, state.lists, state.tasks]);
 
   const doneMilestones = milestones.filter((milestone) => milestone.done).length;
+  const linkedTotal = linkedIds.size;
+  const linkedDone = state.tasks.filter(
+    (task) => linkedIds.has(task.id) && task.done,
+  ).length;
+
   const progress =
-    milestones.length > 0
-      ? Math.round((doneMilestones / milestones.length) * 100)
-      : Math.round(draft.progress);
+    draft.status === 'done'
+      ? 100
+      : milestones.length > 0
+        ? Math.round((doneMilestones / milestones.length) * 100)
+        : linkedTotal > 0
+          ? Math.round((linkedDone / linkedTotal) * 100)
+          : Math.round(draft.progress);
+
+  const progressSource =
+    draft.status === 'done'
+      ? 'Marked done'
+      : milestones.length > 0
+        ? `${doneMilestones} of ${milestones.length} milestones`
+        : linkedTotal > 0
+          ? `${linkedDone} of ${linkedTotal} linked tasks`
+          : 'Set by hand';
 
   const addMilestone = () => {
     const title = newMilestone.replace(/\s+/g, ' ').trim().slice(0, 90);
@@ -80,35 +144,55 @@ export function GoalEditor({
     setNewMilestone('');
   };
 
+  const toggleLink = (taskId: string) => {
+    setLinkedIds((current) => {
+      const next = new Set(current);
+      if (next.has(taskId)) next.delete(taskId);
+      else next.add(taskId);
+      return next;
+    });
+  };
+
+  const syncLinks = (goalId: string) => {
+    for (const task of state.tasks) {
+      const shouldLink = linkedIds.has(task.id);
+      const isLinked = task.goalId === goalId;
+      if (shouldLink && !isLinked) {
+        dispatch({ type: 'task/update', id: task.id, patch: { goalId } });
+      } else if (!shouldLink && isLinked) {
+        dispatch({ type: 'task/update', id: task.id, patch: { goalId: null } });
+      }
+    }
+  };
+
   const save = (event?: FormEvent) => {
     event?.preventDefault();
     const title = draft.title.replace(/\s+/g, ' ').trim();
     if (!title) return;
+    const patch = {
+      title,
+      description: draft.description.trim(),
+      targetDate: draft.targetDate || undefined,
+      progress,
+      areaId: draft.areaId || undefined,
+      status: draft.status,
+      isPrivate: draft.isPrivate,
+    };
     if (!goal) {
+      const goalId = makeId('goal');
       dispatch({
         type: 'goal/add',
+        id: goalId,
         goal: {
-          title,
-          description: draft.description.trim(),
-          targetDate: draft.targetDate || undefined,
-          progress,
+          ...patch,
           milestones,
-          isPrivate: draft.isPrivate,
         },
       });
+      syncLinks(goalId);
     } else {
-      dispatch({
-        type: 'goal/update',
-        id: goal.id,
-        patch: {
-          title,
-          description: draft.description.trim(),
-          targetDate: draft.targetDate || undefined,
-          progress,
-          isPrivate: draft.isPrivate,
-        },
-      });
+      dispatch({ type: 'goal/update', id: goal.id, patch });
       dispatch({ type: 'goal/milestones', goalId: goal.id, milestones });
+      syncLinks(goal.id);
     }
     onClose();
   };
@@ -121,8 +205,8 @@ export function GoalEditor({
         title={goal ? 'Edit goal' : 'New goal'}
         description={
           goal
-            ? 'Trim the target, adjust the finish line, or change what is visible in Present.'
-            : 'Name the thing you are working toward. Milestones turn it into a visible finish line.'
+            ? 'Aim it at an area, connect the tasks that actually move it, and keep the finish line visible.'
+            : 'Name the thing you are working toward. Milestones and linked tasks turn it into a moving finish line.'
         }
         footer={
           <>
@@ -142,9 +226,10 @@ export function GoalEditor({
         <form className="goal-form" onSubmit={save}>
           <div className="goal-editor-head">
             <div className="goal-editor-preview">
-              <Ring value={progress} size={58} stroke={4} color="var(--accent)">
+              <Ring value={progress} size={62} stroke={4} color="var(--accent)">
                 {progress}%
               </Ring>
+              <span className="goal-editor-source">{progressSource}</span>
             </div>
             <div style={{ flex: 1, minWidth: 0 }}>
               <Field label="Goal" htmlFor="goal-title">
@@ -160,6 +245,20 @@ export function GoalEditor({
                   }
                 />
               </Field>
+              <div className="goal-editor-status">
+                <Segmented
+                  value={draft.status}
+                  onChange={(value) =>
+                    setDraft((current) => ({ ...current, status: value as GoalStatus }))
+                  }
+                  options={[
+                    { value: 'active', label: 'Active' },
+                    { value: 'paused', label: 'Paused' },
+                    { value: 'done', label: 'Done' },
+                  ]}
+                  label="Goal status"
+                />
+              </div>
             </div>
           </div>
 
@@ -168,7 +267,7 @@ export function GoalEditor({
               className="textarea"
               value={draft.description}
               maxLength={280}
-              rows={3}
+              rows={2}
               placeholder="A sentence you want to see on the wall."
               onChange={(event) =>
                 setDraft((current) => ({ ...current, description: event.target.value }))
@@ -177,6 +276,22 @@ export function GoalEditor({
           </Field>
 
           <div className="field-row">
+            <Field label="Area">
+              <select
+                className="select"
+                value={draft.areaId}
+                onChange={(event) =>
+                  setDraft((current) => ({ ...current, areaId: event.target.value }))
+                }
+              >
+                <option value="">No area</option>
+                {state.areas.map((area) => (
+                  <option key={area.id} value={area.id}>
+                    {area.emoji} {area.name}
+                  </option>
+                ))}
+              </select>
+            </Field>
             <Field label="Target date" hint="Optional">
               <input
                 className="input"
@@ -187,18 +302,17 @@ export function GoalEditor({
                 }
               />
             </Field>
-            <Field label="Visibility">
-              <div className="goal-private-toggle">
-                <InlineToggle
-                  checked={!draft.isPrivate}
-                  onChange={(visible) =>
-                    setDraft((current) => ({ ...current, isPrivate: !visible }))
-                  }
-                  label="Show in Present"
-                  detail={draft.isPrivate ? 'Hidden in Present' : 'Visible in Present'}
-                />
-              </div>
-            </Field>
+          </div>
+
+          <div className="goal-private-toggle">
+            <InlineToggle
+              checked={!draft.isPrivate}
+              onChange={(visible) =>
+                setDraft((current) => ({ ...current, isPrivate: !visible }))
+              }
+              label="Show in Present"
+              detail={draft.isPrivate ? 'Hidden in Present' : 'Visible in Present'}
+            />
           </div>
 
           <div className="goal-progress-control">
@@ -206,12 +320,14 @@ export function GoalEditor({
               <span>Progress</span>
               <span>{progress}%</span>
             </div>
-            {milestones.length > 0 ? (
+            {milestones.length > 0 || linkedTotal > 0 || draft.status === 'done' ? (
               <>
                 <ProgressBar value={progress} label="Goal progress" />
                 <span className="goal-progress-hint">
-                  Progress follows the {milestones.length} milestone
-                  {milestones.length === 1 ? '' : 's'} below.
+                  Progress follows {progressSource.toLowerCase()}.
+                  {milestones.length === 0 && linkedTotal > 0
+                    ? ' Add milestones below for a hand-built finish line.'
+                    : ''}
                 </span>
               </>
             ) : (
@@ -231,6 +347,53 @@ export function GoalEditor({
             )}
           </div>
 
+          <div className="goal-linked">
+            <div className="goal-progress-head">
+              <span>Linked tasks</span>
+              <span>
+                {linkedDone}/{linkedTotal}
+              </span>
+            </div>
+            <p className="goal-editor-empty">
+              {linkedTotal === 0
+                ? 'Link the small tasks that move this goal. Their completion can drive progress.'
+                : 'Linked tasks stay in their projects and appear on the goal card.'}
+            </p>
+            {tasks.length > 0 ? (
+              <div className="goal-linked-list">
+                {tasks.map(({ task, project, area }) => {
+                  const linked = linkedIds.has(task.id);
+                  return (
+                    <button
+                      key={task.id}
+                      type="button"
+                      className={cx('goal-linked-row', linked && 'is-linked', task.done && 'is-done')}
+                      aria-pressed={linked}
+                      onClick={() => toggleLink(task.id)}
+                    >
+                      <span className={cx('check', linked && 'is-done')} aria-hidden="true">
+                        <Icon name={linked ? 'check' : 'plus'} size={10} strokeWidth={2.4} />
+                      </span>
+                      <span className="goal-linked-row__title">{task.title}</span>
+                      <span className="goal-linked-row__meta">
+                        {area ? (
+                          <span
+                            className="goal-chip-dot"
+                            style={{ ['--goal-color' as string]: area.color } as CSSProperties}
+                          />
+                        ) : null}
+                        {project}
+                      </span>
+                      {task.done ? <span className="goal-linked-row__done">Done</span> : null}
+                    </button>
+                  );
+                })}
+              </div>
+            ) : (
+              <p className="goal-editor-empty">Add a task to a project first, then link it here.</p>
+            )}
+          </div>
+
           <div className="goal-milestone-editor">
             <div className="goal-progress-head">
               <span>Milestones</span>
@@ -244,9 +407,7 @@ export function GoalEditor({
                   <div className="goal-milestone" key={milestone.id}>
                     <button
                       type="button"
-                      className={
-                        milestone.done ? 'check is-done' : 'check'
-                      }
+                      className={milestone.done ? 'check is-done' : 'check'}
                       aria-label={`${
                         milestone.done ? 'Mark not done' : 'Mark done'
                       }: ${milestone.title}`}
@@ -336,7 +497,7 @@ export function GoalEditor({
       <ConfirmDialog
         open={deleteOpen}
         title="Delete this goal?"
-        message={`"${goal?.title ?? 'This goal'}" and its milestones will be removed. Tasks are not affected.`}
+        message={`"${goal?.title ?? 'This goal'}" and its milestones will be removed. Linked tasks stay in their projects.`}
         confirmLabel="Delete goal"
         onClose={() => setDeleteOpen(false)}
         onConfirm={() => {

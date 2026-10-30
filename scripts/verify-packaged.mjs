@@ -11,7 +11,7 @@ import {
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 
-const exe = path.resolve('release/Now Board-win32-x64/Now Board.exe');
+const exe = path.resolve(process.env.NOW_BOARD_PACKAGE_OUT || 'release', 'Now Board-win32-x64/Now Board.exe');
 const packageJson = JSON.parse(readFileSync(path.resolve('package.json'), 'utf8'));
 const dataDir = mkdtempSync(path.join(tmpdir(), 'now-board-packaged-'));
 const desktopDir = mkdtempSync(path.join(tmpdir(), 'now-board-desktop-'));
@@ -70,7 +70,7 @@ try {
     saved.tasks.some((task) => task.title === 'Packaged smoke task'),
     'packaged app saves a task locally',
   );
-  check(saved.version === 4, 'packaged app writes state version 4');
+  check(saved.version === 5, 'packaged app writes state version 5');
   check(
     typeof saved.settings?.boardName === 'string' &&
       typeof saved.settings?.clockFormat === 'string' &&

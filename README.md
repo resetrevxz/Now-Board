@@ -12,7 +12,10 @@ is required.
 
 ![Now Board Edit mode](docs/edit.png)
 
-Now Board **1.1** adds a daily focus target, a system/12-hour/24-hour clock
+The current development version adds areas for organizing lists and goals,
+goal-linked tasks, and goal status and progress views. These new panels are not
+yet release-ready: their styling and goal editor interaction need work. Version
+1.1 added a daily focus target, a system/12-hour/24-hour clock
 setting, a customizable board name, native timer and return-time notifications,
 global quick capture, sleep-aware wake times, and faster keyboard quick modes.
 
@@ -208,8 +211,9 @@ finished.
 
 ## Data, backups, and recovery
 
-The live board is one versioned JSON document (`STATE_VERSION = 4`) stored in
+The live board is one versioned JSON document (`STATE_VERSION = 5`) stored in
 Electron's `userData` folder. Settings shows the exact location under **Data**.
+Version 5 adds areas, goal-linked tasks, and goal status.
 Version 3 adds the board name, clock format, daily focus target, and notification
 preference. Version 2 added the sleeping status kind and return times; older
 boards normalize missing fields and keep working.
@@ -291,8 +295,8 @@ current `dist/`.
 - Present privacy is item-level. The status subline is public by design. Quiet
   statuses hide goals, tasks, stats, notes, and work panels, but the status label,
   subline, and return time remain public.
-- Return times are cues only. They do not auto-change status, auto-start a timer,
-  or send a notification when they pass.
+- Return times are cues only. They do not auto-change status or auto-start a timer;
+  optional local notifications can alert you when they pass.
 - The newest 20 daily backups are kept; archives are kept indefinitely.
 - Global Open works only while the app is running. The desktop shortcut starts
   it from cold, but points at the current release folder.

@@ -64,9 +64,19 @@ export function EditScreen({
           <TodayCard state={state} dispatch={dispatch} />
         </div>
         <div className="workspace">
-          <TasksPanel state={state} dispatch={dispatch} quickAddRef={quickAddRef} />
+          <TasksPanel
+            state={state}
+            dispatch={dispatch}
+            quickAddRef={quickAddRef}
+            onOpenGoal={onEditGoal}
+          />
           <div className="side-stack">
-            <GoalsPanel state={state} onAdd={onAddGoal} onEdit={onEditGoal} />
+            <GoalsPanel
+              state={state}
+              dispatch={dispatch}
+              onAdd={onAddGoal}
+              onEdit={onEditGoal}
+            />
             <NotesPanel state={state} dispatch={dispatch} />
           </div>
         </div>

@@ -7,7 +7,18 @@ import {
   type RefObject,
 } from 'react';
 import type { Action, BoardState, Priority, Task } from '../state/types';
-import { getActiveList, PRIORITY_LABEL } from '../state/selectors';
+import {
+  areaTaskCount,
+  completedTasksForList,
+  getActiveArea,
+  getActiveList,
+  listsForArea,
+  openTaskCount,
+  PRIORITY_LABEL,
+  tasksForList,
+} from '../state/selectors';
+import { AREA_COLORS } from '../state/defaults';
+import { makeId } from '../state/reducer';
 import { cx } from '../lib/cx';
 import { useDismiss } from '../hooks/useUi';
 import { useToast } from './Toasts';
@@ -38,22 +49,35 @@ interface ListDialogState {
   value: string;
 }
 
+interface AreaDialogState {
+  mode: 'add' | 'rename';
+  name: string;
+  emoji: string;
+  color: string;
+}
+
 export function TasksPanel({
   state,
   dispatch,
   quickAddRef,
+  onOpenGoal,
 }: {
   state: BoardState;
   dispatch: (action: Action) => void;
   quickAddRef: RefObject<HTMLInputElement | null>;
+  onOpenGoal?: (goalId: string) => void;
 }) {
+  const activeArea = getActiveArea(state);
+  const activeAreaId = activeArea?.id ?? state.activeAreaId;
+  const areaProjects = listsForArea(state, activeAreaId);
   const activeList = getActiveList(state);
   const activeListId = activeList?.id ?? state.activeListId;
-  const listTasks = state.tasks.filter((task) => task.listId === activeListId);
+  const listTasks = tasksForList(state, activeListId);
   const incomplete = listTasks.filter((task) => !task.done);
-  const completed = listTasks.filter((task) => task.done);
+  const completed = completedTasksForList(state, activeListId);
   const nowTask = state.tasks.find((task) => task.isNow && !task.done) ?? null;
   const nowList = nowTask ? state.lists.find((list) => list.id === nowTask.listId) : null;
+  const nowArea = nowList ? state.areas.find((area) => area.id === nowList.areaId) : null;
   const listedIncomplete =
     nowTask && nowTask.listId === activeListId
       ? incomplete.filter((task) => task.id !== nowTask.id)
@@ -64,16 +88,19 @@ export function TasksPanel({
   const [priority, setPriority] = useState<Priority>('medium');
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editDraft, setEditDraft] = useState('');
-  const [completedOpen, setCompletedOpen] = useState(false);
   const [listMenuOpen, setListMenuOpen] = useState(false);
+  const [areaMenuOpen, setAreaMenuOpen] = useState(false);
   const [listDialog, setListDialog] = useState<ListDialogState | null>(null);
+  const [areaDialog, setAreaDialog] = useState<AreaDialogState | null>(null);
   const [deleteListOpen, setDeleteListOpen] = useState(false);
+  const [deleteAreaOpen, setDeleteAreaOpen] = useState(false);
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [dropTarget, setDropTarget] = useState<{ id: string; before: boolean } | null>(null);
   const listMenuRef = useRef<HTMLDivElement>(null);
-  const nameInputRef = useRef<HTMLInputElement>(null);
+  const areaMenuRef = useRef<HTMLDivElement>(null);
 
   useDismiss(listMenuRef, listMenuOpen, () => setListMenuOpen(false));
+  useDismiss(areaMenuRef, areaMenuOpen, () => setAreaMenuOpen(false));
 
   const addTask = () => {
     const clean = title.replace(/\s+/g, ' ').trim();
@@ -241,34 +268,86 @@ export function TasksPanel({
     const clean = listDialog.value.replace(/\s+/g, ' ').trim().slice(0, 40);
     if (!clean) return;
     if (listDialog.mode === 'add') {
-      dispatch({ type: 'list/add', name: clean });
-      notify(`List created · ${clean}`, { duration: 2000 });
+      dispatch({ type: 'list/add', name: clean, areaId: activeAreaId });
+      notify(
+        `Project created · ${clean}${activeArea ? ` in ${activeArea.name}` : ''}`,
+        { duration: 2000 },
+      );
     } else {
       dispatch({ type: 'list/rename', id: activeListId, name: clean });
     }
     setListDialog(null);
   };
 
-  const shareTaskMeta = (task: Task) => (
-    <div className="task-row__meta">
-      {task.isNow ? <span className="badge badge--accent">Now</span> : null}
-      <span
-        className="task-row__priority"
-        style={{ ['--priority-color' as string]: PRIORITY_COLOR[task.priority] } as CSSProperties}
-      >
-        <span className="priority-dot" />
-        {PRIORITY_LABEL[task.priority]}
-      </span>
-      {task.isPrivate ? (
-        <>
-          <span className="sep" />
-          <span className="task-row__private">
-            <Icon name="lock" size={9} /> Private
-          </span>
-        </>
-      ) : null}
-    </div>
-  );
+  const submitAreaDialog = () => {
+    if (!areaDialog) return;
+    const clean = areaDialog.name.replace(/\s+/g, ' ').trim().slice(0, 32);
+    if (!clean) return;
+    if (areaDialog.mode === 'add') {
+      const areaId = makeId('area');
+      dispatch({
+        type: 'area/add',
+        id: areaId,
+        name: clean,
+        emoji: areaDialog.emoji,
+        color: areaDialog.color,
+      });
+      dispatch({ type: 'list/add', name: 'Inbox', areaId });
+      notify(`Area created · ${clean}`, { duration: 2000 });
+    } else {
+      dispatch({
+        type: 'area/update',
+        id: activeAreaId,
+        patch: { name: clean, emoji: areaDialog.emoji, color: areaDialog.color },
+      });
+    }
+    setAreaDialog(null);
+  };
+
+  const goalForTask = (task: Task) =>
+    task.goalId ? state.goals.find((goal) => goal.id === task.goalId) : undefined;
+
+  const shareTaskMeta = (task: Task) => {
+    const goal = goalForTask(task);
+    return (
+      <div className="task-row__meta">
+        {task.isNow ? <span className="badge badge--accent">Now</span> : null}
+        <span
+          className="task-row__priority"
+          style={{ ['--priority-color' as string]: PRIORITY_COLOR[task.priority] } as CSSProperties}
+        >
+          <span className="priority-dot" />
+          {PRIORITY_LABEL[task.priority]}
+        </span>
+        {goal ? (
+          <>
+            <span className="sep" />
+            <button
+              type="button"
+              className="task-row__goal"
+              title={`Goal: ${goal.title}`}
+              tabIndex={-1}
+              onClick={(event) => {
+                event.stopPropagation();
+                onOpenGoal?.(goal.id);
+              }}
+            >
+              <Icon name="target" size={9} />
+              <span>{goal.title}</span>
+            </button>
+          </>
+        ) : null}
+        {task.isPrivate ? (
+          <>
+            <span className="sep" />
+            <span className="task-row__private">
+              <Icon name="lock" size={9} /> Private
+            </span>
+          </>
+        ) : null}
+      </div>
+    );
+  };
 
   const renderTask = (task: Task, index?: number) => {
     const isEditing = editingId === task.id;
@@ -341,7 +420,14 @@ export function TasksPanel({
           {shareTaskMeta(task)}
         </div>
         <div className="task-row__actions">
-          {!task.done ? (
+          {task.done ? (
+            <IconButton
+              label="Restore task"
+              icon="reset"
+              size="sm"
+              onClick={() => dispatch({ type: 'task/toggle', id: task.id })}
+            />
+          ) : (
             <IconButton
               label={task.isNow ? 'Clear Now' : 'Set as Now'}
               icon="bolt"
@@ -349,7 +435,7 @@ export function TasksPanel({
               active={task.isNow}
               onClick={() => setNow(task)}
             />
-          ) : null}
+          )}
           <IconButton
             label={`Priority: ${PRIORITY_LABEL[task.priority]}. Change priority.`}
             icon="flag"
@@ -377,6 +463,8 @@ export function TasksPanel({
     );
   };
 
+  const otherAreas = state.areas.filter((area) => area.id !== activeAreaId);
+
   return (
     <section className="panel tasks-panel" aria-label="Tasks">
       <div className="panel__head">
@@ -386,17 +474,26 @@ export function TasksPanel({
             Tasks
           </span>
           <span className="count">{incomplete.length}</span>
+          {activeArea ? (
+            <span
+              className="panel__context"
+              style={{ ['--area-color' as string]: activeArea.color } as CSSProperties}
+            >
+              <span className="panel__context-dot" />
+              {activeArea.name}
+            </span>
+          ) : null}
         </div>
         <div className="panel__actions">
           <IconButton
-            label="New list"
+            label="New project"
             icon="plus"
             size="sm"
             onClick={() => setListDialog({ mode: 'add', value: '' })}
           />
           <div className="popover-anchor" ref={listMenuRef}>
             <IconButton
-              label="List options"
+              label="Project options"
               icon="more"
               size="sm"
               aria-expanded={listMenuOpen}
@@ -414,8 +511,33 @@ export function TasksPanel({
                   }}
                 >
                   <Icon name="pencil" size={14} />
-                  Rename list
+                  Rename project
                 </button>
+                {otherAreas.length > 0 ? (
+                  <>
+                    <div className="menu-separator" />
+                    <div className="menu-label">Move to area</div>
+                    {otherAreas.map((area) => (
+                      <button
+                        key={area.id}
+                        type="button"
+                        className="menu-item"
+                        role="menuitem"
+                        onClick={() => {
+                          setListMenuOpen(false);
+                          dispatch({ type: 'list/move', id: activeListId, areaId: area.id });
+                          notify(`Moved to ${area.name}`, { duration: 1800 });
+                        }}
+                      >
+                        <span className="menu-item__emoji" aria-hidden="true">
+                          {area.emoji}
+                        </span>
+                        {area.name}
+                      </button>
+                    ))}
+                  </>
+                ) : null}
+                <div className="menu-separator" />
                 <button
                   type="button"
                   className="menu-item"
@@ -441,7 +563,7 @@ export function TasksPanel({
                   }}
                 >
                   <Icon name="trash" size={14} />
-                  Delete list
+                  Delete project
                 </button>
               </div>
             ) : null}
@@ -449,47 +571,137 @@ export function TasksPanel({
         </div>
       </div>
 
-      <div className="task-tabs">
-        <div className="task-tabs__scroll" role="tablist" aria-label="Task lists">
-          {state.lists.map((list) => {
-            const openCount = state.tasks.filter(
-              (task) => task.listId === list.id && !task.done,
-            ).length;
+      <div className="area-bar">
+        <div className="area-bar__scroll" role="tablist" aria-label="Areas">
+          {state.areas.map((area) => {
+            const active = area.id === activeAreaId;
+            const openCount = areaTaskCount(state, area.id);
+            return (
+              <button
+                key={area.id}
+                type="button"
+                role="tab"
+                aria-selected={active}
+                className={cx('area-chip', active && 'is-active')}
+                style={{ ['--area-color' as string]: area.color } as CSSProperties}
+                onClick={() => {
+                  dispatch({ type: 'area/activate', id: area.id });
+                  setEditingId(null);
+                }}
+              >
+                <span className="area-chip__emoji" aria-hidden="true">
+                  {area.emoji}
+                </span>
+                <span className="area-chip__name">{area.name}</span>
+                <span className="area-chip__count">{openCount}</span>
+              </button>
+            );
+          })}
+          <button
+            type="button"
+            className="area-chip area-chip--add"
+            aria-label="New area"
+            title="New area"
+            disabled={state.areas.length >= 8}
+            onClick={() =>
+              setAreaDialog({
+                mode: 'add',
+                name: '',
+                emoji: '📁',
+                color: AREA_COLORS[state.areas.length % AREA_COLORS.length]!,
+              })
+            }
+          >
+            <Icon name="plus" size={13} />
+          </button>
+        </div>
+        <div className="area-bar__tools">
+          <div className="popover-anchor" ref={areaMenuRef}>
+            <IconButton
+              label="Area options"
+              icon="sliders"
+              size="sm"
+              aria-expanded={areaMenuOpen}
+              onClick={() => setAreaMenuOpen((open) => !open)}
+            />
+            {areaMenuOpen ? (
+              <div className="popover list-menu" role="menu">
+                <button
+                  type="button"
+                  className="menu-item"
+                  role="menuitem"
+                  onClick={() => {
+                    setAreaMenuOpen(false);
+                    setAreaDialog({
+                      mode: 'rename',
+                      name: activeArea?.name ?? '',
+                      emoji: activeArea?.emoji ?? '📁',
+                      color: activeArea?.color ?? AREA_COLORS[0]!,
+                    });
+                  }}
+                >
+                  <Icon name="pencil" size={14} />
+                  Rename area
+                </button>
+                <div className="menu-separator" />
+                <button
+                  type="button"
+                  className="menu-item menu-item--danger"
+                  role="menuitem"
+                  disabled={state.areas.length <= 1}
+                  onClick={() => {
+                    setAreaMenuOpen(false);
+                    setDeleteAreaOpen(true);
+                  }}
+                >
+                  <Icon name="trash" size={14} />
+                  Delete area
+                </button>
+              </div>
+            ) : null}
+          </div>
+        </div>
+      </div>
+
+      <div className="project-bar">
+        <div className="project-bar__scroll" role="tablist" aria-label="Projects">
+          {areaProjects.map((list) => {
             const active = list.id === activeListId;
+            const openCount = openTaskCount(state, list.id);
             return (
               <button
                 key={list.id}
                 type="button"
                 role="tab"
                 aria-selected={active}
-                className={cx('task-tab', active && 'is-active')}
+                className={cx('project-tab', active && 'is-active')}
+                style={{ ['--area-color' as string]: activeArea?.color ?? 'var(--accent)' } as CSSProperties}
                 onClick={() => {
                   dispatch({ type: 'list/activate', id: list.id });
                   setEditingId(null);
                 }}
               >
+                <span className="project-tab__mark" aria-hidden="true" />
                 {list.name}
-                <span className="task-tab__count">{openCount}</span>
+                <span className="project-tab__count">{openCount}</span>
               </button>
             );
           })}
           <button
             type="button"
-            className="task-tab task-tab--add"
-            aria-label="New list"
-            title="New list"
+            className="project-tab project-tab--add"
+            aria-label="New project"
+            title="New project"
+            disabled={state.lists.length >= 24}
             onClick={() => setListDialog({ mode: 'add', value: '' })}
           >
-            <Icon name="plus" size={13} />
+            <Icon name="plus" size={12} />
           </button>
         </div>
-        <div className="task-tabs__tools">
-          <IconButton
-            label="Focus quick add"
-            icon="pencil"
-            size="sm"
-            onClick={() => quickAddRef.current?.focus()}
-          />
+        <div className="project-bar__tools">
+          <span className="project-bar__hint">
+            {areaProjects.length} project{areaProjects.length === 1 ? '' : 's'}
+          </span>
         </div>
       </div>
 
@@ -499,8 +711,8 @@ export function TasksPanel({
           ref={quickAddRef}
           value={title}
           maxLength={200}
-          placeholder={`Add to ${activeList?.name ?? 'list'}…`}
-          aria-label={`Add a task to ${activeList?.name ?? 'list'}`}
+          placeholder={`Add to ${activeList?.name ?? 'project'}…`}
+          aria-label={`Add a task to ${activeList?.name ?? 'project'}`}
           onChange={(event) => setTitle(event.target.value)}
           onKeyDown={(event) => {
             if (event.key === 'Enter') {
@@ -533,7 +745,10 @@ export function TasksPanel({
         </button>
       </div>
 
-      <div className="now-card">
+      <div
+        className="now-card"
+        style={{ ['--area-color' as string]: nowArea?.color ?? 'var(--accent)' } as CSSProperties}
+      >
         <div className="now-card__top">
           <span className="now-card__eyebrow">
             <Icon name="bolt" size={11} />
@@ -573,7 +788,10 @@ export function TasksPanel({
               <span className="priority-dot" style={{ background: PRIORITY_COLOR[nowTask.priority] }} />
               <span>{PRIORITY_LABEL[nowTask.priority]} priority</span>
               <span className="sep" />
-              <span>{nowList?.name ?? 'List'}</span>
+              <span>
+                {nowArea ? `${nowArea.emoji} ${nowArea.name}` : 'Workspace'}
+                {nowList ? ` / ${nowList.name}` : ''}
+              </span>
               {nowTask.isPrivate ? (
                 <>
                   <span className="sep" />
@@ -610,8 +828,8 @@ export function TasksPanel({
           <div className="task-empty">
             <EmptyState
               icon="check-circle"
-              title="Nothing on this list yet"
-              detail="Add the next small thing. You can reorder it when the day changes."
+              title="Nothing in this project yet"
+              detail="Add the next small thing. Areas keep different kinds of work apart."
               action={
                 <Button size="sm" variant="subtle" onClick={() => quickAddRef.current?.focus()}>
                   Add a task
@@ -622,7 +840,11 @@ export function TasksPanel({
         ) : (
           <>
             {listedIncomplete.length > 0 ? (
-              <div className="task-list" role="list" aria-label={`${activeList?.name ?? 'List'} tasks`}>
+              <div
+                className="task-list"
+                role="list"
+                aria-label={`${activeList?.name ?? 'Project'} tasks`}
+              >
                 {listedIncomplete.map((task, index) => renderTask(task, index))}
               </div>
             ) : (
@@ -630,7 +852,7 @@ export function TasksPanel({
                 <EmptyState
                   compact
                   icon="sparkles"
-                  title={incomplete.length > 0 ? 'Nothing after this' : 'All clear on this list'}
+                  title={incomplete.length > 0 ? 'Nothing after this' : 'All clear in this project'}
                   detail={
                     incomplete.length > 0
                       ? 'Your Now task is pinned above. Keep it to one thing.'
@@ -643,20 +865,11 @@ export function TasksPanel({
             {completed.length > 0 ? (
               <div className="completed-block">
                 <div className="completed-head">
-                  <button
-                    type="button"
-                    className="completed-head__toggle"
-                    aria-expanded={completedOpen}
-                    onClick={() => setCompletedOpen((open) => !open)}
-                  >
-                    <Icon
-                      name="chevron-right"
-                      size={12}
-                      className="completed-head__chevron"
-                    />
+                  <span className="completed-head__label">
+                    <Icon name="check-circle" size={11} />
                     Completed
-                    <span className="task-group-label__count">{completed.length}</span>
-                  </button>
+                    <span className="completed-head__count">{completed.length}</span>
+                  </span>
                   <button
                     type="button"
                     className="completed-head__clear"
@@ -665,11 +878,9 @@ export function TasksPanel({
                     Clear
                   </button>
                 </div>
-                {completedOpen ? (
-                  <div className="task-list completed-list" role="list" aria-label="Completed tasks">
-                    {completed.map((task) => renderTask(task))}
-                  </div>
-                ) : null}
+                <div className="task-list completed-list" role="list" aria-label="Completed tasks">
+                  {completed.map((task) => renderTask(task))}
+                </div>
               </div>
             ) : null}
           </>
@@ -679,11 +890,11 @@ export function TasksPanel({
       <Modal
         open={listDialog !== null}
         onClose={() => setListDialog(null)}
-        title={listDialog?.mode === 'rename' ? 'Rename list' : 'New list'}
+        title={listDialog?.mode === 'rename' ? 'Rename project' : 'New project'}
         description={
           listDialog?.mode === 'rename'
-            ? 'The list name appears everywhere the list is shown.'
-            : 'Lists keep different kinds of work apart. You can move tasks between them later.'
+            ? 'The project name appears everywhere the project is shown.'
+            : `Projects live inside ${activeArea?.name ?? 'the active area'}. You can move them between areas later.`
         }
         footer={
           <>
@@ -695,20 +906,19 @@ export function TasksPanel({
               onClick={submitListDialog}
               disabled={!listDialog?.value.trim()}
             >
-              {listDialog?.mode === 'rename' ? 'Rename' : 'Create list'}
+              {listDialog?.mode === 'rename' ? 'Rename' : 'Create project'}
             </Button>
           </>
         }
       >
-        <Field label="List name" htmlFor="list-name">
+        <Field label="Project name" htmlFor="list-name">
           <input
             id="list-name"
-            ref={nameInputRef}
             className="input"
             data-autofocus
             value={listDialog?.value ?? ''}
             maxLength={40}
-            placeholder="Clients, ideas, this week…"
+            placeholder="Launch, client work, this week…"
             onChange={(event) =>
               setListDialog((current) =>
                 current ? { ...current, value: event.target.value } : current,
@@ -724,18 +934,125 @@ export function TasksPanel({
         </Field>
       </Modal>
 
+      <Modal
+        open={areaDialog !== null}
+        onClose={() => setAreaDialog(null)}
+        title={areaDialog?.mode === 'rename' ? 'Edit area' : 'New area'}
+        description={
+          areaDialog?.mode === 'rename'
+            ? 'Areas group projects that belong to the same part of your life or work.'
+            : 'An area is a folder for related projects. A new Inbox project is created with it.'
+        }
+        footer={
+          <>
+            <Button variant="ghost" onClick={() => setAreaDialog(null)}>
+              Cancel
+            </Button>
+            <Button
+              variant="accent"
+              onClick={submitAreaDialog}
+              disabled={!areaDialog?.name.trim()}
+            >
+              {areaDialog?.mode === 'rename' ? 'Save area' : 'Create area'}
+            </Button>
+          </>
+        }
+      >
+        <div className="area-editor">
+          <div className="area-editor__preview">
+            <span
+              className="area-editor__glyph"
+              style={{ ['--area-color' as string]: areaDialog?.color ?? AREA_COLORS[0] } as CSSProperties}
+              aria-hidden="true"
+            >
+              {areaDialog?.emoji || '📁'}
+            </span>
+            <span className="area-editor__sample">{areaDialog?.name.trim() || 'New area'}</span>
+          </div>
+          <div className="field-row">
+            <Field label="Emoji" htmlFor="area-emoji">
+              <input
+                id="area-emoji"
+                className="input area-editor__emoji"
+                value={areaDialog?.emoji ?? ''}
+                maxLength={8}
+                onChange={(event) =>
+                  setAreaDialog((current) =>
+                    current ? { ...current, emoji: event.target.value } : current,
+                  )
+                }
+              />
+            </Field>
+            <Field label="Name" htmlFor="area-name">
+              <input
+                id="area-name"
+                className="input"
+                data-autofocus
+                value={areaDialog?.name ?? ''}
+                maxLength={32}
+                placeholder="Studio, Craft, Life…"
+                onChange={(event) =>
+                  setAreaDialog((current) =>
+                    current ? { ...current, name: event.target.value } : current,
+                  )
+                }
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter') {
+                    event.preventDefault();
+                    submitAreaDialog();
+                  }
+                }}
+              />
+            </Field>
+          </div>
+          <Field label="Colour">
+            <div className="color-row">
+              {AREA_COLORS.map((color) => (
+                <button
+                  key={color}
+                  type="button"
+                  className={cx(
+                    'swatch',
+                    areaDialog?.color === color && 'is-active',
+                  )}
+                  style={{ ['--swatch-color' as string]: color } as CSSProperties}
+                  aria-label={`Area colour ${color}`}
+                  aria-pressed={areaDialog?.color === color}
+                  onClick={() =>
+                    setAreaDialog((current) => (current ? { ...current, color } : current))
+                  }
+                />
+              ))}
+            </div>
+          </Field>
+        </div>
+      </Modal>
+
       <ConfirmDialog
         open={deleteListOpen}
-        title="Delete this list?"
-        message={`"${activeList?.name ?? 'List'}" and its ${listTasks.length} task${
+        title="Delete this project?"
+        message={`"${activeList?.name ?? 'Project'}" and its ${listTasks.length} task${
           listTasks.length === 1 ? '' : 's'
         } will be removed. This cannot be undone.`}
-        confirmLabel="Delete list"
+        confirmLabel="Delete project"
         onClose={() => setDeleteListOpen(false)}
         onConfirm={() => {
           dispatch({ type: 'list/delete', id: activeListId });
           setDeleteListOpen(false);
-          notify('List deleted.', { tone: 'danger' });
+          notify('Project deleted.', { tone: 'danger' });
+        }}
+      />
+
+      <ConfirmDialog
+        open={deleteAreaOpen}
+        title="Delete this area?"
+        message={`"${activeArea?.name ?? 'Area'}" and every project inside it will be removed. Tasks in those projects are deleted too. This cannot be undone.`}
+        confirmLabel="Delete area"
+        onClose={() => setDeleteAreaOpen(false)}
+        onConfirm={() => {
+          dispatch({ type: 'area/delete', id: activeAreaId });
+          setDeleteAreaOpen(false);
+          notify('Area deleted.', { tone: 'danger' });
         }}
       />
     </section>

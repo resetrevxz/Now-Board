@@ -1,9 +1,11 @@
 import type {
   Action,
+  Area,
   BoardState,
   FocusMode,
   FocusState,
   Goal,
+  GoalStatus,
   Priority,
   Settings,
   SettingsPatch,
@@ -12,6 +14,7 @@ import type {
   Task,
 } from './types';
 import { STATE_VERSION } from './types';
+import { AREA_COLORS } from './defaults';
 import { clampNotes, clampNumber, cleanLine, isHexColor } from './sanitize';
 import { DAY } from './time';
 
@@ -19,7 +22,8 @@ const MAX_SESSIONS = 500;
 const SESSION_RETENTION_MS = 60 * DAY;
 const MAX_TASKS = 300;
 const MAX_GOALS = 40;
-const MAX_LISTS = 12;
+const MAX_AREAS = 8;
+const MAX_LISTS = 24;
 
 export function makeId(prefix = 'id'): string {
   const cryptoObject = globalThis.crypto;
@@ -195,6 +199,15 @@ function recalculateGoal(goal: Goal): Goal {
   return { ...goal, progress: Math.round((done / goal.milestones.length) * 100) };
 }
 
+function isGoalStatus(value: unknown): value is GoalStatus {
+  return value === 'active' || value === 'paused' || value === 'done';
+}
+
+function defaultAreaColor(areas: Area[]): string {
+  const used = new Set(areas.map((area) => area.color.toLowerCase()));
+  return AREA_COLORS.find((color) => !used.has(color.toLowerCase())) ?? AREA_COLORS[0]!;
+}
+
 function mergeSettings(base: Settings, patch: SettingsPatch): Settings {
   const next: Settings = {
     ...base,
@@ -349,6 +362,10 @@ export function reducer(state: BoardState, action: Action): BoardState {
         action.listId && state.lists.some((list) => list.id === action.listId)
           ? action.listId
           : state.activeListId;
+      const goalId =
+        action.goalId && state.goals.some((goal) => goal.id === action.goalId)
+          ? action.goalId
+          : undefined;
       const task: Task = {
         id: action.id ?? makeId('task'),
         listId,
@@ -358,6 +375,7 @@ export function reducer(state: BoardState, action: Action): BoardState {
         isNow: Boolean(action.isNow),
         isPrivate: false,
         createdAt: at,
+        ...(goalId ? { goalId } : {}),
       };
       return touch(insertTask(state, task), at);
     }
@@ -402,6 +420,12 @@ export function reducer(state: BoardState, action: Action): BoardState {
         action.patch.listId && state.lists.some((list) => list.id === action.patch.listId)
           ? action.patch.listId
           : existing.listId;
+      const goalId =
+        action.patch.goalId === null
+          ? undefined
+          : action.patch.goalId && state.goals.some((goal) => goal.id === action.patch.goalId)
+            ? action.patch.goalId
+            : existing.goalId;
       return touch({
         ...state,
         tasks: state.tasks.map((task) =>
@@ -411,6 +435,7 @@ export function reducer(state: BoardState, action: Action): BoardState {
                 title,
                 priority,
                 listId,
+                ...(goalId ? { goalId } : { goalId: undefined }),
                 isPrivate:
                   typeof action.patch.isPrivate === 'boolean'
                     ? action.patch.isPrivate
@@ -457,17 +482,98 @@ export function reducer(state: BoardState, action: Action): BoardState {
       return touch({ ...state, tasks });
     }
 
+    case 'area/add': {
+      if (state.areas.length >= MAX_AREAS) return state;
+      const at = action.at ?? Date.now();
+      const area: Area = {
+        id: action.id ?? makeId('area'),
+        name: cleanLine(action.name, 32, '') || 'New area',
+        emoji: cleanLine(action.emoji, 8, '📁'),
+        color: isHexColor(action.color) ? action.color : defaultAreaColor(state.areas),
+        createdAt: at,
+      };
+      return touch({ ...state, areas: [...state.areas, area], activeAreaId: area.id }, at);
+    }
+
+    case 'area/update': {
+      const existing = state.areas.find((area) => area.id === action.id);
+      if (!existing) return state;
+      const name =
+        action.patch.name !== undefined
+          ? cleanLine(action.patch.name, 32, existing.name)
+          : existing.name;
+      return touch({
+        ...state,
+        areas: state.areas.map((area) =>
+          area.id === action.id
+            ? {
+                ...area,
+                name,
+                emoji:
+                  action.patch.emoji !== undefined
+                    ? cleanLine(action.patch.emoji, 8, area.emoji)
+                    : area.emoji,
+                color:
+                  action.patch.color !== undefined && isHexColor(action.patch.color)
+                    ? action.patch.color
+                    : area.color,
+              }
+            : area,
+        ),
+      });
+    }
+
+    case 'area/delete': {
+      if (state.areas.length <= 1) return state;
+      const areas = state.areas.filter((area) => area.id !== action.id);
+      const removedListIds = new Set(
+        state.lists.filter((list) => list.areaId === action.id).map((list) => list.id),
+      );
+      const lists = state.lists.filter((list) => list.areaId !== action.id);
+      const firstArea = areas[0];
+      if (!firstArea) return state;
+      const firstList = lists.find((list) => list.areaId === firstArea.id) ?? lists[0];
+      return touch({
+        ...state,
+        areas,
+        lists,
+        tasks: state.tasks.filter((task) => !removedListIds.has(task.listId)),
+        activeAreaId:
+          state.activeAreaId === action.id ? firstArea.id : state.activeAreaId,
+        activeListId:
+          state.activeListId && removedListIds.has(state.activeListId)
+            ? (firstList?.id ?? state.activeListId)
+            : state.activeListId,
+      });
+    }
+
+    case 'area/activate': {
+      if (!state.areas.some((area) => area.id === action.id)) return state;
+      const list = state.lists.find((entry) => entry.areaId === action.id);
+      return {
+        ...state,
+        activeAreaId: action.id,
+        activeListId: list?.id ?? state.activeListId,
+      };
+    }
+
     case 'list/add': {
       if (state.lists.length >= MAX_LISTS) return state;
-      const name = cleanLine(action.name, 40, '') || 'Untitled list';
+      const name = cleanLine(action.name, 40, '') || 'Untitled project';
+      const areaId =
+        action.areaId && state.areas.some((area) => area.id === action.areaId)
+          ? action.areaId
+          : state.activeAreaId;
       const list = {
         id: action.id ?? makeId('list'),
         name,
+        areaId,
         createdAt: action.at ?? Date.now(),
       };
       return touch({
         ...state,
         lists: [...state.lists, list],
+        activeAreaId: areaId,
         activeListId: list.id,
       });
     }
@@ -483,26 +589,48 @@ export function reducer(state: BoardState, action: Action): BoardState {
       });
     }
 
+    case 'list/move': {
+      if (!state.areas.some((area) => area.id === action.areaId)) return state;
+      return touch({
+        ...state,
+        lists: state.lists.map((list) =>
+          list.id === action.id ? { ...list, areaId: action.areaId } : list,
+        ),
+        activeAreaId:
+          state.activeListId === action.id ? action.areaId : state.activeAreaId,
+      });
+    }
+
     case 'list/delete': {
       if (state.lists.length <= 1) return state;
+      const removed = state.lists.find((list) => list.id === action.id);
+      if (!removed) return state;
       const lists = state.lists.filter((list) => list.id !== action.id);
-      const first = lists[0];
-      if (!first) return state;
+      const sibling = lists.find((list) => list.areaId === removed.areaId) ?? lists[0];
+      if (!sibling) return state;
       return touch({
         ...state,
         lists,
         tasks: state.tasks.filter((task) => task.listId !== action.id),
-        activeListId: state.activeListId === action.id ? first.id : state.activeListId,
+        activeAreaId:
+          state.activeListId === action.id ? sibling.areaId : state.activeAreaId,
+        activeListId: state.activeListId === action.id ? sibling.id : state.activeListId,
       });
     }
 
-    case 'list/activate':
-      if (!state.lists.some((list) => list.id === action.id)) return state;
-      return { ...state, activeListId: action.id };
+    case 'list/activate': {
+      const list = state.lists.find((entry) => entry.id === action.id);
+      if (!list) return state;
+      return { ...state, activeListId: list.id, activeAreaId: list.areaId };
+    }
 
     case 'goal/add': {
       if (state.goals.length >= MAX_GOALS) return state;
       const at = action.at ?? Date.now();
+      const areaId =
+        action.goal?.areaId && state.areas.some((area) => area.id === action.goal?.areaId)
+          ? action.goal.areaId
+          : state.activeAreaId;
       const goal: Goal = {
         id: action.id ?? makeId('goal'),
         title: cleanLine(action.goal?.title, 90, '') || 'New goal',
@@ -510,6 +638,8 @@ export function reducer(state: BoardState, action: Action): BoardState {
         progress: Math.round(clampNumber(action.goal?.progress, 0, 100, 0)),
         milestones: action.goal?.milestones ?? [],
         targetDate: action.goal?.targetDate,
+        areaId,
+        status: isGoalStatus(action.goal?.status) ? action.goal.status : 'active',
         isPrivate: Boolean(action.goal?.isPrivate),
         createdAt: at,
       };
@@ -537,6 +667,13 @@ export function reducer(state: BoardState, action: Action): BoardState {
           action.patch.targetDate !== undefined
             ? action.patch.targetDate || undefined
             : existing.targetDate,
+        areaId:
+          action.patch.areaId !== undefined
+            ? state.areas.some((area) => area.id === action.patch.areaId)
+              ? action.patch.areaId
+              : undefined
+            : existing.areaId,
+        status: isGoalStatus(action.patch.status) ? action.patch.status : existing.status,
         isPrivate:
           typeof action.patch.isPrivate === 'boolean'
             ? action.patch.isPrivate

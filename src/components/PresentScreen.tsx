@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { PresentViewModel, StatusKind, TimelineModel } from '../state/types';
 import {
   clockParts,
@@ -83,10 +83,12 @@ export function PresentScreen({
   view,
   showHint = false,
   share = false,
+  onSelectPreset,
 }: {
   view: PresentViewModel;
   showHint?: boolean;
   share?: boolean;
+  onSelectPreset?: (presetId: string) => void;
 }) {
   // Seconds only matter while a focus timer or a return countdown is live.
   // Everything else is minute-granular, so an idle Present screen stops waking
@@ -96,6 +98,48 @@ export function PresentScreen({
     (view.status.returnAt !== null && view.status.returnAt > Date.now() - 1000);
   const now = useNow(needsSeconds ? 1000 : 30_000);
   const settings = view.settings;
+  const quietKind = view.status.kind !== 'focus';
+  const modeRailEnabled = !share && !quietKind && Boolean(onSelectPreset);
+  const [railVisible, setRailVisible] = useState(false);
+  const hideTimerRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (!modeRailEnabled) {
+      setRailVisible(false);
+      return;
+    }
+    let lastMove = 0;
+    const reveal = () => {
+      setRailVisible(true);
+      if (hideTimerRef.current !== null) window.clearTimeout(hideTimerRef.current);
+      hideTimerRef.current = window.setTimeout(() => setRailVisible(false), 4200);
+    };
+    const onPointerMove = () => {
+      const at = Date.now();
+      if (at - lastMove < 220) return;
+      lastMove = at;
+      reveal();
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.defaultPrevented || event.ctrlKey || event.metaKey || event.altKey) return;
+      const index = Number(event.key) - 1;
+      if (!Number.isInteger(index) || index < 0) return;
+      const preset = view.presets[index];
+      if (!preset) return;
+      event.preventDefault();
+      onSelectPreset?.(preset.id);
+      reveal();
+    };
+    window.addEventListener('pointermove', onPointerMove);
+    window.addEventListener('keydown', onKeyDown);
+    setRailVisible(true);
+    hideTimerRef.current = window.setTimeout(() => setRailVisible(false), 4200);
+    return () => {
+      window.removeEventListener('pointermove', onPointerMove);
+      window.removeEventListener('keydown', onKeyDown);
+      if (hideTimerRef.current !== null) window.clearTimeout(hideTimerRef.current);
+    };
+  }, [modeRailEnabled, onSelectPreset, view.presets]);
 
   useEffect(() => {
     const root = document.documentElement;
@@ -472,6 +516,14 @@ export function PresentScreen({
                             <span className="present-task-row__priority" style={{ ['--priority-color' as string]: `var(--priority-${view.nowTask.priority})` }} />
                             <span style={{ textTransform: 'capitalize' }}>{view.nowTask.priority}</span>
                             <span className="sep" />
+                            <span
+                              className="present-now__area"
+                              style={{ ['--area-color' as string]: view.nowTask.areaColor }}
+                            >
+                              <span className="present-area-dot" />
+                              {view.nowTask.areaName}
+                            </span>
+                            <span className="sep" />
                             <span>{view.nowTask.listName}</span>
                           </div>
                         </div>
@@ -508,7 +560,13 @@ export function PresentScreen({
                                 ['--priority-color' as string]: `var(--priority-${task.priority})`,
                               }}
                             />
-                            <span className="present-task-row__list">{task.listName}</span>
+                            <span
+                              className="present-task-row__list"
+                              style={{ ['--area-color' as string]: task.areaColor }}
+                            >
+                              <span className="present-area-dot" />
+                              {task.listName}
+                            </span>
                           </div>
                         ))}
                         {view.upNext.length === 0 ? (
@@ -547,14 +605,37 @@ export function PresentScreen({
                               {Math.round(goal.progress)}
                             </Ring>
                             <div className="present-goal__info">
-                              <div className="present-goal__title">{goal.title}</div>
+                              <div className="present-goal__title-row">
+                                <div className="present-goal__title">{goal.title}</div>
+                                {goal.areaName ? (
+                                  <span
+                                    className="present-goal__area"
+                                    style={{ ['--area-color' as string]: goal.areaColor ?? 'var(--accent)' }}
+                                  >
+                                    <span className="present-area-dot" />
+                                    {goal.areaName}
+                                  </span>
+                                ) : null}
+                              </div>
                               {goal.description ? (
                                 <div className="present-goal__desc">{goal.description}</div>
                               ) : null}
+                              <div className="present-goal__bar">
+                                <ProgressBar value={goal.progress} label={`${goal.title} progress`} />
+                              </div>
                               <div className="present-goal__meta">
-                                {goal.totalMilestones > 0 ? (
+                                {goal.nextMilestone ? (
+                                  <span className="present-goal__next">
+                                    <Icon name="arrow-right" size={9} />
+                                    {goal.nextMilestone}
+                                  </span>
+                                ) : goal.totalMilestones > 0 ? (
                                   <span>
                                     {goal.completedMilestones}/{goal.totalMilestones} milestones
+                                  </span>
+                                ) : goal.linkedTasks > 0 ? (
+                                  <span>
+                                    {goal.linkedTasksDone}/{goal.linkedTasks} linked tasks
                                   </span>
                                 ) : (
                                   <span>{Math.round(goal.progress)}% there</span>
@@ -642,8 +723,44 @@ export function PresentScreen({
         )}
       </div>
 
+      {modeRailEnabled ? (
+        <div
+          className={cx('present-modes', railVisible && 'is-visible')}
+          onFocusCapture={() => setRailVisible(true)}
+        >
+          <span className="present-modes__label">
+            <span className="live-dot" aria-hidden="true" />
+            Mode
+          </span>
+          <div className="present-modes__list" role="group" aria-label="Switch mode">
+            {view.presets.slice(0, 9).map((preset, index) => (
+              <button
+                key={preset.id}
+                type="button"
+                className={cx(
+                  'present-mode',
+                  view.activePresetId === preset.id && 'is-active',
+                )}
+                style={{ ['--mode-color' as string]: preset.color }}
+                aria-pressed={view.activePresetId === preset.id}
+                onClick={() => onSelectPreset?.(preset.id)}
+              >
+                <span className="present-mode__key">{index + 1}</span>
+                <span className="present-mode__emoji" aria-hidden="true">
+                  {preset.emoji}
+                </span>
+                <span className="present-mode__name">{preset.label}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      ) : null}
+
       {showHint ? (
         <div className="mode-hint" role="status">
+          <span className="mode-hint__item">
+            <Kbd>1–9</Kbd> switch mode
+          </span>
           <span className="mode-hint__item">
             <Kbd>Esc</Kbd> edit board
           </span>
